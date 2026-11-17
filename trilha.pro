@@ -20,3 +20,4 @@ RESOURCES += src/resources.qrc
 win32: RC_ICONS = assets/trilha.ico
 macx: exists(assets/trilha.icns): ICON = assets/trilha.icns
 macx: QMAKE_TARGET_BUNDLE_PREFIX = io.github.arthur-zt
+macx: QMAKE_CXXFLAGS += -include $$PWD/src/macshim.h

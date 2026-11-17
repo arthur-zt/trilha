@@ -36,11 +36,14 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           QML_SOURCES_PATHS: ${{ github.workspace }}/src
-          EXTRA_PLATFORM_PLUGINS: "libqwayland-generic.so;libqwayland-egl.so"
         run: |
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy*.AppImage
+          # The Wayland plugin's file name changed across Qt versions, so
+          # bundle whichever ones this Qt ships.
+          export EXTRA_PLATFORM_PLUGINS="$(cd "$QT_ROOT_DIR/plugins/platforms" && ls libqwayland*.so | paste -sd';')"
+          echo "Wayland plugins: $EXTRA_PLATFORM_PLUGINS"
           ./linuxdeploy-x86_64.AppImage --appdir AppDir \
             -e build/trilha \
             -d pkgbuild/trilha.desktop \
