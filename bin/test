@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+# Arch and Omarchy call it qmake6; Qt's own installers call it qmake.
+QMAKE="$(command -v qmake6 || command -v qmake)"
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+mkdir -p "$ROOT/build/tests"
+cd "$ROOT/build/tests"
+
+"$QMAKE" "$ROOT/tests/trilha_tests.pro"
+make -j"$(nproc)"
+QT_QPA_PLATFORM=offscreen ./trilha_tests

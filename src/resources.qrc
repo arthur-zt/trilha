@@ -1,0 +1,26 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="AppButton.qml">AppButton.qml</file>
+        <file alias="ApostilaView.qml">ApostilaView.qml</file>
+        <file alias="Card.qml">Card.qml</file>
+        <file alias="CardsView.qml">CardsView.qml</file>
+        <file alias="Chip.qml">Chip.qml</file>
+        <file alias="GlossarioView.qml">GlossarioView.qml</file>
+        <file alias="HelpOverlay.qml">HelpOverlay.qml</file>
+        <file alias="HomeView.qml">HomeView.qml</file>
+        <file alias="ItemRow.qml">ItemRow.qml</file>
+        <file alias="LessonBlock.qml">LessonBlock.qml</file>
+        <file alias="Main.qml">Main.qml</file>
+        <file alias="NavButton.qml">NavButton.qml</file>
+        <file alias="QuizView.qml">QuizView.qml</file>
+        <file alias="RichLabel.qml">RichLabel.qml</file>
+        <file alias="SearchOverlay.qml">SearchOverlay.qml</file>
+        <file alias="StatCard.qml">StatCard.qml</file>
+        <file alias="TrilhaView.qml">TrilhaView.qml</file>
+        <file alias="trilha.png">../assets/trilha-256.png</file>
+        <file alias="content/apostila.json">content/apostila.json</file>
+        <file alias="content/glossario.json">content/glossario.json</file>
+        <file alias="content/quiz.json">content/quiz.json</file>
+        <file alias="content/trilha.json">content/trilha.json</file>
+    </qresource>
+</RCC>

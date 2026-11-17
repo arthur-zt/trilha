@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Trilha
+Comment=Estudo de Infra & DevOps: apostila, glossário, flashcards e quiz
+Exec=trilha
+Icon=trilha
+Terminal=false
+Categories=Education;Utility;
+StartupWMClass=trilha

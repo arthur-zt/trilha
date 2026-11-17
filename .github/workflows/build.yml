@@ -1,0 +1,129 @@
+name: build
+
+# Builds Trilha for Linux (AppImage), Windows (zip) and macOS (dmg) on every
+# push and pull request; a tag like v0.2.0 also publishes them as a release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: "6.8.3"
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libfuse2 file
+      - name: Build
+        run: ./bin/build
+      - name: Test
+        run: ./bin/test
+      - name: Check content
+        run: ./build/trilha check
+      - name: Package AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          QML_SOURCES_PATHS: ${{ github.workspace }}/src
+          EXTRA_PLATFORM_PLUGINS: "libqwayland-generic.so;libqwayland-egl.so"
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+            -e build/trilha \
+            -d pkgbuild/trilha.desktop \
+            -i assets/trilha.svg \
+            --plugin qt --output appimage
+          mv Trilha*.AppImage trilha-linux-x86_64.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trilha-linux
+          path: trilha-linux-x86_64.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build
+        shell: cmd
+        run: |
+          mkdir build
+          cd build
+          qmake ..\trilha.pro
+          nmake
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build\release\trilha.exe dist\
+          windeployqt --release --qmldir src --no-translations dist\trilha.exe
+          Copy-Item LICENSE, README.md dist\
+          Compress-Archive -Path dist\* -DestinationPath trilha-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trilha-windows
+          path: trilha-windows-x64.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Make the app icon
+        run: |
+          mkdir trilha.iconset
+          for size in 16 32 64 128 256 512; do
+            sips -z $size $size assets/trilha-1024.png --out trilha.iconset/icon_${size}x${size}.png
+            double=$((size * 2))
+            sips -z $double $double assets/trilha-1024.png --out trilha.iconset/icon_${size}x${size}@2x.png
+          done
+          iconutil -c icns trilha.iconset -o assets/trilha.icns
+      - name: Build
+        run: |
+          mkdir build && cd build
+          qmake ../trilha.pro
+          make -j"$(sysctl -n hw.ncpu)"
+      - name: Package
+        run: |
+          cd build
+          macdeployqt trilha.app -qmldir=../src -dmg
+          mv trilha.dmg ../trilha-macos.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trilha-macos
+          path: trilha-macos.dmg
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

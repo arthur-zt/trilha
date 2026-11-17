@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+# Arch and Omarchy call it qmake6; Qt's own installers call it qmake.
+QMAKE="$(command -v qmake6 || command -v qmake)"
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+mkdir -p "$ROOT/build"
+cd "$ROOT/build"
+
+"$QMAKE" "$ROOT/trilha.pro"
+make -j"$(nproc)"
+
+echo "Built $ROOT/build/trilha"

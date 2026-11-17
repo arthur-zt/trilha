@@ -1,0 +1,619 @@
+{
+  "quizzes": [
+    {
+      "capitulo": "cap-redes",
+      "perguntas": [
+        {
+          "id": "redes-1",
+          "pergunta": "Do `app-01`, `nc -vz db-01 5432` falha na hora com *No route to host*, mas o `ping` para o mesmo host responde. O que isso indica?",
+          "opcoes": [
+            "O Postgres está parado e o kernel do `db-01` respondeu com RST",
+            "Falta uma rota para a subnet do `db-01` na tabela de roteamento do `app-01`",
+            "Um firewall no caminho recusou ativamente o SYN e respondeu com ICMP",
+            "O `pg_hba.conf` não tem uma linha liberando o IP do `app-01`"
+          ],
+          "correta": 2,
+          "explicacao": "*No route to host* chegando na hora é uma mensagem ICMP de destino inalcançável, típica de REJECT no firewall (no iptables, `--reject-with icmp-host-prohibited`). Se faltasse rota, o `ping` também falharia; se nada escutasse na porta, viria RST e o erro seria *Connection refused*. O `pg_hba` só age depois que a conexão TCP já foi aceita, e responde com erro do próprio Postgres.",
+          "licao": "l-tcp"
+        },
+        {
+          "id": "redes-2",
+          "pergunta": "`nc -vz host 443` fica parado por cerca de dois minutos e termina em timeout. Qual é a causa mais provável?",
+          "opcoes": [
+            "Nada está escutando na porta 443 do host, e o kernel não responde a portas fechadas",
+            "O certificado TLS do servidor venceu e o handshake fica esperando uma renovação",
+            "Um REJECT do iptables está respondendo com ICMP e o cliente está retransmitindo",
+            "Algo no caminho descarta o SYN em silêncio (DROP, Security List sem a regra)"
+          ],
+          "correta": 3,
+          "explicacao": "Timeout significa que nada voltou: nem SYN-ACK, nem RST, nem ICMP, e o TCP ficou retransmitindo o SYN. Porta fechada gera RST imediato (*refused*) e REJECT gera erro imediato, então os dois falham na hora. O certificado nem entra em jogo, porque o TLS só começa depois do handshake TCP.",
+          "licao": "l-tcp"
+        },
+        {
+          "id": "redes-3",
+          "pergunta": "O curl no site devolve 502 do Traefik, e `docker ps` mostra que o container da app está parado. O que o Traefik recebeu ao tentar o backend?",
+          "opcoes": [
+            "Um erro ao conectar (recusa ou destino inalcançável), sem resposta HTTP",
+            "Nenhuma resposta dentro do prazo, e por isso devolveu 502 depois de esperar",
+            "Uma resposta 502 gerada pela própria app, que o Traefik só repassou ao cliente",
+            "Nenhum router casou com o host, porque o container parado sai da configuração"
+          ],
+          "correta": 0,
+          "explicacao": "502 é o proxy dizendo que tentou o backend e recebeu erro ou recusa: com o container parado, a conexão falha na hora. Esperar sem resposta até estourar o tempo é o 504. Com o file provider, o router continua existindo mesmo com o container parado; o 404 apareceria se nenhum router casasse com o host.",
+          "licao": "l-http"
+        },
+        {
+          "id": "redes-4",
+          "pergunta": "Um usuário de fora da empresa abre um painel interno publicado no Traefik com `ipAllowList` e recebe 403; um colega na rede interna abre normalmente. O que o 403 diz?",
+          "opcoes": [
+            "O Traefik negou pela origem, e a app nem chegou a ser consultada",
+            "O usuário não está autenticado e precisa fazer login para receber outro código",
+            "O backend da app está fora do ar, mas só para as conexões que vêm de fora",
+            "O certificado do painel não cobre o nome que o usuário digitou no navegador"
+          ],
+          "correta": 0,
+          "explicacao": "403 é *Forbidden*: o pedido foi entendido e recusado por permissão, e é exatamente o que o `ipAllowList` devolve para origens fora da lista. Falta de autenticação seria 401; backend fora do ar daria 5xx; problema de certificado aparece como erro de TLS, antes de existir qualquer código HTTP.",
+          "licao": "l-http"
+        },
+        {
+          "id": "redes-5",
+          "pergunta": "Por que o listener 443 do LB da OCI consegue servir `loja`, `blog` e `portal` .exemplo.com.br, cada um com o seu certificado, num único IP?",
+          "opcoes": [
+            "Os três domínios estão cobertos por um único certificado wildcard importado no LB",
+            "O LB lê o cabeçalho Host da requisição HTTP e só então escolhe qual certificado usar",
+            "O cliente manda o nome no ClientHello (SNI), e o LB escolhe o certificado por ele",
+            "Cada domínio é atendido por uma porta interna diferente no backend set do LB"
+          ],
+          "correta": 2,
+          "explicacao": "O servidor precisa escolher o certificado antes de qualquer HTTP existir, e o SNI é o campo do ClientHello, em texto aberto, que diz qual nome o cliente quer. O cabeçalho Host só trafega depois, já cifrado. Wildcard cobre subdomínios de um domínio só, nunca três domínios diferentes, e SNI não depende de wildcard.",
+          "licao": "l-tls"
+        },
+        {
+          "id": "redes-6",
+          "pergunta": "Da rede interna ninguém abre `exemplo.com.br`; pelo 4G, abre normalmente. `dig +short exemplo.com.br @8.8.8.8` responde o IP certo. Qual é o próximo passo mais útil?",
+          "opcoes": [
+            "Renovar o certificado do site, porque a visão de fora já mostra que o DNS está certo",
+            "Perguntar ao DNS interno (`dig @IP_DO_DC`) e comparar: o nome é split-horizon",
+            "Pedir aos usuários que limpem o cache do navegador e testem de novo em seguida",
+            "Reiniciar o Traefik do `proxy-01`, que é o ponto em comum entre as duas redes"
+          ],
+          "correta": 1,
+          "explicacao": "Num nome split-horizon, a rede interna e a internet recebem respostas de servidores diferentes, então a visão do 8.8.8.8 não diz nada sobre a do DC. Comparar as duas respostas mostra na hora se o problema é o DNS interno, como quando uma zona do DC trava. Certificado e Traefik não explicariam funcionar pelo 4G e falhar só dentro.",
+          "licao": "l-dns"
+        },
+        {
+          "id": "redes-7",
+          "pergunta": "O site responde 504. Do `proxy-01`, um `curl` direto no IP:porta do backend, no mesmo caminho, devolve 200 em 50 ms. Onde está o problema?",
+          "opcoes": [
+            "Na aplicação, que está lenta para responder e estoura o tempo limite do proxy",
+            "No Traefik ou antes dele, como o serviço apontando para outro IP ou porta",
+            "No DNS público do site, que está devolvendo o IP antigo do servidor",
+            "No banco de dados da aplicação, que trava as consultas mais pesadas"
+          ],
+          "correta": 1,
+          "explicacao": "Pular o proxy é o teste que separa as camadas: se o backend responde rápido do próprio `proxy-01`, a app e o banco estão bem nesse caminho. Sobra a configuração do Traefik (URL do serviço errada, caindo num DROP) ou algo antes dele, como um timeout no LB. DNS errado não produziria um 504 vindo do proxy certo.",
+          "licao": "l-roteiro"
+        },
+        {
+          "id": "redes-8",
+          "pergunta": "A app sobe no host e `ss -ltnp` mostra `127.0.0.1:8080`. De outro servidor, `nc -vz host 8080` dá *Connection refused*. Por quê?",
+          "opcoes": [
+            "O firewall do host está fazendo DROP na 8080 para as conexões que vêm de outra rede",
+            "A app ainda está iniciando e o kernel recusa conexões até ela terminar de subir",
+            "Falta uma rota de volta do host para o servidor que está fazendo o teste",
+            "A app só escuta no loopback; o SYN que chega pelo IP da rede recebe RST"
+          ],
+          "correta": 3,
+          "explicacao": "Uma porta aberta em `127.0.0.1` só aceita conexões destinadas ao loopback; no IP da rede não há socket escutando, e o kernel responde com RST, que é o *refused*. DROP ou rota de volta faltando dariam timeout, não recusa imediata. A correção é a app escutar em `0.0.0.0` ou no IP certo.",
+          "licao": "l-tcp"
+        }
+      ]
+    },
+    {
+      "capitulo": "cap-linux",
+      "perguntas": [
+        {
+          "id": "linux-1",
+          "pergunta": "`df -h` mostra `/` em 98%, mas `du -shx /` soma só 40% do disco. Qual é a causa mais provável?",
+          "opcoes": [
+            "O volume LVM é maior que o sistema de arquivos e falta rodar um `resize2fs`",
+            "O `du` ignora arquivos ocultos, cujo nome começa com ponto, na soma final",
+            "Os inodes acabaram e o `df` passou a calcular o espaço usado de forma errada",
+            "Arquivos apagados que um processo ainda mantém abertos, como um log rotacionado"
+          ],
+          "correta": 3,
+          "explicacao": "Apagar só remove o nome; os blocos só voltam quando nenhum processo mantém o arquivo aberto. O `du` percorre nomes e não vê esses arquivos, mas o `df` pergunta ao sistema de arquivos e conta o espaço. LVM explica diferença entre o disco e o `df`, não entre `df` e `du`.",
+          "licao": "l-dfdu"
+        },
+        {
+          "id": "linux-2",
+          "pergunta": "Com `lsof +L1` você acha um log de 30 GB apagado, aberto pelo PID 4321 de uma app de prd que não pode reiniciar agora. O que libera o espaço sem derrubá-la?",
+          "opcoes": [
+            "Rodar `rm` de novo no caminho original do log para forçar a liberação dos blocos",
+            "Rodar `sync` e depois `echo 3 > /proc/sys/vm/drop_caches` para soltar o espaço",
+            "`truncate -s 0 /proc/4321/fd/N`, pelo descritor que a app mantém aberto",
+            "Criar um arquivo vazio com o mesmo nome do log, para a app passar a escrever nele"
+          ],
+          "correta": 2,
+          "explicacao": "O descritor em `/proc/PID/fd/N` ainda aponta para o inode apagado, então truncar por ali zera o conteúdo sem fechar o arquivo. O nome já não existe, então outro `rm` não faz nada, e um arquivo novo com o mesmo nome é outro inode, que a app ignora. `drop_caches` libera cache de memória, não disco.",
+          "licao": "l-dfdu"
+        },
+        {
+          "id": "linux-3",
+          "pergunta": "Uma app falha com *No space left on device*, mas `df -h` mostra a partição com 40% de uso. O que conferir primeiro?",
+          "opcoes": [
+            "`df -i`, porque milhões de arquivos pequenos podem ter esgotado os inodes",
+            "`lsof +L1`, procurando arquivos apagados que ainda estejam abertos",
+            "`free -h`, porque essa mensagem também aparece quando a RAM acaba",
+            "`vgs` e `lvs`, para ver se ainda há espaço livre no grupo de volumes"
+          ],
+          "correta": 0,
+          "explicacao": "Cada arquivo gasta um inode, e o total é fixado na formatação; acabando os inodes, nenhum arquivo novo é criado, mesmo com blocos sobrando. Arquivos apagados e abertos fariam o `df` mostrar uso alto, não 40%. Espaço livre no LVM não ajuda um sistema de arquivos que ainda tem blocos livres.",
+          "licao": "l-inodes"
+        },
+        {
+          "id": "linux-4",
+          "pergunta": "Por que um `chmod 750` rodado pela pipeline tira a escrita do `dev1`, se a entrada `user:dev1:rwx` continua aparecendo no `getfacl`?",
+          "opcoes": [
+            "Porque o chmod apaga as entradas da ACL e o `getfacl` mostra uma cópia antiga guardada em cache",
+            "Porque o 0 do último dígito (outros) também vale para os usuários nomeados na ACL",
+            "Com ACL, os bits de grupo do chmod viram a máscara, que cai para `r-x` e limita a entrada",
+            "Porque a ACL só vale para arquivos criados depois dela, e o chmod recriou o diretório"
+          ],
+          "correta": 2,
+          "explicacao": "Quando existe ACL, os bits de grupo que o `chmod` altera são a máscara, e ela é o teto de toda entrada nomeada. O 5 do meio vira `mask::r-x`, e o `getfacl` mostra `#effective:r-x` ao lado da entrada intacta. Por isso a correção é restaurar a máscara (`setfacl -m m::rwx`), não recriar a ACL.",
+          "licao": "l-acl"
+        },
+        {
+          "id": "linux-5",
+          "pergunta": "O deploy apaga e recria os arquivos de `/opt/app-loja` a cada execução, e os arquivos novos nascem sem a permissão do dev. O que resolve na origem?",
+          "opcoes": [
+            "Uma ACL padrão no diretório (`setfacl -d -m u:dev:rwx`), herdada pelos arquivos novos",
+            "Um `setfacl -R -m u:dev:rwx` rodado uma vez, que também passa a valer para arquivos futuros",
+            "Mudar o umask do usuário do dev para 002, para ele herdar escrita nos arquivos do deploy",
+            "Colocar o dev no grupo do usuário de deploy, que é dono dos arquivos recriados"
+          ],
+          "correta": 0,
+          "explicacao": "A ACL padrão é herdada por tudo que for criado no diretório, então os arquivos recém-recriados já nascem com a entrada do dev. O `-R` sem `-d` só altera o que existe naquele momento, e o umask do dev não influencia arquivos criados por outro usuário. Atenção: se a pipeline ainda rodar `chmod` depois, a máscara volta a cair.",
+          "licao": "l-acl"
+        },
+        {
+          "id": "linux-6",
+          "pergunta": "`docker ps -a` mostra o container da API saindo com `Exited (137)` várias vezes por dia. O que investigar primeiro?",
+          "opcoes": [
+            "O que significa o código de erro 137 na documentação da própria aplicação",
+            "SIGKILL do OOM killer: ver `OOMKilled` no `docker inspect` e o `journalctl -k`",
+            "Quem está rodando `docker stop`, que manda SIGTERM e por isso gera o código 137",
+            "O espaço em disco do host, porque o Docker sinaliza disco cheio com o código 137"
+          ],
+          "correta": 1,
+          "explicacao": "Código acima de 128 significa morte por sinal: 137 = 128 + 9, SIGKILL, e a causa mais comum é falta de memória (limite do container ou do host). SIGTERM daria 143 (128 + 15); um `docker stop` só chega a 137 se o processo ignorar o SIGTERM e for morto depois do prazo. A app não escolhe esse código: ela nem teve chance de sair.",
+          "licao": "l-systemd"
+        },
+        {
+          "id": "linux-7",
+          "pergunta": "Você criou `/etc/systemd/system/coletor.service`, rodou `systemctl daemon-reload` e `systemctl start coletor`. Depois do reboot, o serviço não subiu. Por quê?",
+          "opcoes": [
+            "Faltou rodar `systemctl daemon-reload` de novo depois do reboot do servidor",
+            "Units em `/etc/systemd/system` não sobem no boot, só as de `/usr/lib/systemd/system`",
+            "`start` só liga agora; para subir no boot é preciso `enable` (ou `enable --now`)",
+            "Sem `Restart=always` na unit, o systemd não inicia o serviço durante o boot"
+          ],
+          "correta": 2,
+          "explicacao": "`enable` cria o link da unit no target (geralmente `multi-user.target`, pela seção `[Install]`), e é isso que a faz subir no boot; `start` só age na sessão atual. `/etc/systemd/system` é justamente o lugar das units do administrador. `Restart=` trata de quedas depois que o serviço já subiu, não do boot.",
+          "licao": "l-systemd"
+        },
+        {
+          "id": "linux-8",
+          "pergunta": "O compartilhamento de rede não montou num reboot, e um job gravou 20 GB em `/mnt/backup`. O mount voltou, o `df` de `/` continua alto e o `du` não encontra os arquivos. Por quê?",
+          "opcoes": [
+            "O cliente SMB guarda uma cópia local dos arquivos de `/mnt/backup` no disco raiz",
+            "O journald registrou o conteúdo gravado pelo job e ocupou o espaço em `/var/log`",
+            "Os inodes dos arquivos ficaram presos ao mount antigo e só somem com outro reboot",
+            "Os arquivos ficaram no disco raiz, escondidos embaixo do ponto de montagem"
+          ],
+          "correta": 3,
+          "explicacao": "Sem o mount, `/mnt/backup` era só um diretório do disco raiz, e o job gravou ali. Quando o compartilhamento montou por cima, esses arquivos ficaram invisíveis para o `du`, mas os blocos continuam ocupados no `/`. Desmontar (ou um bind mount de `/` em outro lugar) revela os arquivos para apagar.",
+          "licao": "l-dfdu"
+        }
+      ]
+    },
+    {
+      "capitulo": "cap-git",
+      "perguntas": [
+        {
+          "id": "git-1",
+          "pergunta": "Qual é a diferença real entre fazer merge e fazer rebase da main na sua branch?",
+          "opcoes": [
+            "O rebase dá prioridade às alterações da main e o merge dá prioridade às alterações da sua branch",
+            "O rebase evita conflitos, que só aparecem quando as duas histórias são unidas por merge",
+            "O merge reescreve o histórico da main para incluir a branch, e o rebase não reescreve nada",
+            "Merge cria um commit unindo as histórias; rebase reescreve seus commits com hashes novos"
+          ],
+          "correta": 3,
+          "explicacao": "O merge preserva as duas histórias e cria um commit com dois pais; o rebase reaplica cada commit seu sobre a nova base, gerando commits novos e um histórico linear. Nenhum dos dois prioriza um lado: conflito acontece nos dois, no rebase só que commit a commit. Quem reescreve histórico é o rebase, e só o da sua branch.",
+          "licao": "l-rebase"
+        },
+        {
+          "id": "git-2",
+          "pergunta": "Você fez rebase numa branch que um colega já tinha baixado e deu `push --force`. O que acontece?",
+          "opcoes": [
+            "Nada de grave: o rebase só muda os hashes, e o git do colega reconcilia tudo no próximo pull",
+            "O Azure DevOps sempre rejeita force push, então o push falha e nada muda no remoto",
+            "Commits enviados pelo colega nesse meio-tempo somem do remoto, e as cópias divergem",
+            "O colega perde também os commits locais dele que ainda não tinham sido enviados"
+          ],
+          "correta": 2,
+          "explicacao": "O force push substitui a branch remota pela sua; o que só existia lá some. Os commits antigos do colega e os seus novos têm hashes diferentes, então o próximo pull dele tenta juntar duas histórias divergentes. Os commits locais dele continuam na máquina dele, e o Azure DevOps só bloqueia force push se houver política ou permissão configurada.",
+          "licao": "l-rebase"
+        },
+        {
+          "id": "git-3",
+          "pergunta": "Um `git rebase` deu errado e seus commits parecem ter sumido do `git log`. Como recuperar?",
+          "opcoes": [
+            "Não tem como: o rebase apaga os commits antigos do repositório na mesma hora",
+            "`git revert` no último commit criado pelo rebase, que desfaz a operação toda",
+            "`git fetch`, que traz de volta do remoto os commits que o rebase reescreveu",
+            "`git reflog` para achar o hash de antes do rebase e `git reset --hard` nele"
+          ],
+          "correta": 3,
+          "explicacao": "O rebase cria commits novos, mas os antigos continuam no repositório local até o coletor de lixo remover, e o reflog registra para onde o HEAD apontava antes. `git revert` cria um commit que desfaz mudanças, não restaura a branch. O `fetch` só ajuda se os commits já tivessem sido enviados.",
+          "licao": "l-rebase"
+        },
+        {
+          "id": "git-4",
+          "pergunta": "O Dockerfile faz `COPY .npmrc .`, depois `RUN npm install && rm .npmrc`. Quem tem pull da imagem no OCIR consegue ler o token do `.npmrc`?",
+          "opcoes": [
+            "Não: o rm remove o arquivo de todas as camadas da imagem antes do push",
+            "Sim: o arquivo segue na camada do COPY; o rm só o esconde nas de cima",
+            "Só se o token também tiver sido passado como ENV, que fica nos metadados",
+            "Não, porque o OCIR cifra as camadas e só o runtime consegue abrir o conteúdo"
+          ],
+          "correta": 1,
+          "explicacao": "Cada instrução gera uma camada somente leitura; o `rm` numa camada posterior só marca o arquivo como apagado, e a camada do COPY continua carregando o token. Basta extrair as camadas da imagem para lê-lo. A saída é `RUN --mount=type=secret,id=npmrc ...`, que não grava o segredo em nenhuma camada.",
+          "licao": "l-camadas"
+        },
+        {
+          "id": "git-5",
+          "pergunta": "No compose, a API usa `DATABASE_URL=postgres://...@localhost:5432/...`, e o Postgres é outro serviço do mesmo compose. A conexão é recusada. Por quê?",
+          "opcoes": [
+            "O Postgres precisa publicar `ports: \"5432:5432\"` para que a API consiga alcançá-lo pela rede",
+            "O DNS interno do Docker não resolve `localhost`, só nomes declarados em `extra_hosts`",
+            "Cada container tem seu network namespace: `localhost` é a própria API, não o Postgres",
+            "Falta `network_mode: bridge` na API, sem o qual ela não enxerga os outros serviços"
+          ],
+          "correta": 2,
+          "explicacao": "`localhost` dentro do container é o loopback do próprio container, onde nada escuta na 5432, daí o *refused*. Na rede que o compose cria, o DNS interno resolve o nome do serviço (por exemplo `postgres`) para o IP do container. Publicar a porta expõe o banco no host, e mesmo assim `localhost` na API continuaria errado.",
+          "licao": "l-dockernet"
+        },
+        {
+          "id": "git-6",
+          "pergunta": "Por que o deploy por digest (`app@sha256:...`) é mais confiável que por tag (`app:1.18.0`)?",
+          "opcoes": [
+            "A tag é um ponteiro que o próximo push move; o digest é o hash do conteúdo",
+            "O digest é assinado pela OCI no push, e a tag não tem nenhuma garantia de origem",
+            "A tag expira no OCIR depois de um tempo, enquanto o digest continua disponível",
+            "O digest baixa mais rápido porque o Docker pula a verificação das camadas"
+          ],
+          "correta": 0,
+          "explicacao": "Um push com a mesma tag simplesmente move o ponteiro para outra imagem, sem aviso, como acontece quando duas pipelines publicam a mesma versão ao mesmo tempo. O digest é calculado a partir do conteúdo, então o mesmo digest é sempre a mesma imagem. Digest não é assinatura: garante integridade, não quem publicou.",
+          "licao": "l-digest"
+        },
+        {
+          "id": "git-7",
+          "pergunta": "Duas runs de prd leram \"última versão = 1.17\" ao mesmo tempo e as duas publicaram 1.18.0. Por que reservar a tag no git antes do push resolve?",
+          "opcoes": [
+            "O push no git é mais rápido que o push no OCIR, e a primeira run sempre ganha a corrida",
+            "Criar no remoto uma tag que já existe falha de forma atômica: só uma run fica com ela",
+            "Com a tag no git, o Azure DevOps passa a enfileirar as runs de prd uma depois da outra",
+            "A tag no git guarda o digest da imagem, e o OCIR recusa digests que não estão no git"
+          ],
+          "correta": 1,
+          "explicacao": "É uma condição de corrida: as duas leram o mesmo estado e decidiram igual. O remoto do git aceita a criação da tag uma única vez; a segunda tentativa é rejeitada sem `--force`, e essa recusa vira a trava. Velocidade não resolve corrida, e o git não sabe nada sobre o OCIR.",
+          "licao": "l-digest"
+        },
+        {
+          "id": "git-8",
+          "pergunta": "Você deixou um dev com ACL restrita em `/opt/app` e o colocou no grupo docker \"só para ver logs\". Qual é o efeito real?",
+          "opcoes": [
+            "Ele vê logs e reinicia containers, mas a ACL continua limitando o que ele faz no host",
+            "Ele só consegue mexer em containers que ele mesmo criou com o próprio usuário",
+            "Ele vira root só dentro dos containers, isolado do host pelo namespace de usuário",
+            "Ele pode rodar `docker run -v /:/host ...` e ter root no host, o que anula a ACL"
+          ],
+          "correta": 3,
+          "explicacao": "O daemon do Docker roda como root e faz o que o cliente pedir, inclusive montar o `/` do host num container e dar um shell nele. Por isso pertencer ao grupo docker equivale a ser root, e a ACL deixa de importar. Para ver logs ou reiniciar, um job no Rundeck ou uma linha no sudoers para um comando só seguem o menor privilégio.",
+          "licao": "l-dockerroot"
+        }
+      ]
+    },
+    {
+      "capitulo": "cap-sre",
+      "perguntas": [
+        {
+          "id": "sre-1",
+          "pergunta": "O MySQL tem backup diário à meia-noite. O disco morre às 17h e a restauração leva 3 h. Em termos de RPO e RTO, o que aconteceu?",
+          "opcoes": [
+            "Cerca de 3 h de dados perdidos (RPO) e cerca de 17 h fora do ar (RTO)",
+            "Cerca de 17 h de dados perdidos (RPO) e cerca de 3 h fora do ar (RTO)",
+            "RPO e RTO de 24 h, porque os dois são definidos pela frequência do backup",
+            "Nenhum dado foi perdido, porque o backup diário cobre o dia inteiro de operação"
+          ],
+          "correta": 1,
+          "explicacao": "RPO mede quanto dado se perde: tudo entre o último backup (meia-noite) e a falha (17h). RTO mede quanto tempo até voltar: as 3 h de restauração. Com backup diário o RPO pode chegar a 24 h; guardar os binlogs fora do servidor é o que o derruba para minutos.",
+          "licao": "l-rpo"
+        },
+        {
+          "id": "sre-2",
+          "pergunta": "Qual é a evidência mais confiável de que o RTO de 2 h do MySQL é real?",
+          "opcoes": [
+            "O job de backup terminando com sucesso todos os dias no Rundeck, com log guardado",
+            "O tamanho do arquivo de backup batendo com o tamanho do banco em produção",
+            "Um alerta no Zabbix que dispara sempre que o job de backup falha à noite",
+            "Restaurações periódicas numa VM descartável, com os dados conferidos e o tempo cronometrado"
+          ],
+          "correta": 3,
+          "explicacao": "Backup que nunca foi restaurado é só esperança: job verde e tamanho certo não provam que o arquivo restaura nem quanto tempo leva. Só a restauração cronometrada mede o RTO real e revela problemas como dump incompleto ou versão incompatível. Alerta de falha é útil, mas cobre outro risco.",
+          "licao": "l-rpo"
+        },
+        {
+          "id": "sre-3",
+          "pergunta": "A réplica MySQL ficou dois dias parada depois de um OOM. Ao religar, para com o erro 1236 *could not find first log file*. Qual é o mecanismo?",
+          "opcoes": [
+            "O purge do master apagou o binlog de onde a réplica precisava continuar",
+            "A réplica perdeu o sync durante a parada, e basta rodar `START REPLICA` para retomar",
+            "O relay log da réplica corrompeu no OOM e precisa ser recriado com `RESET REPLICA`",
+            "A senha do usuário de replicação expirou enquanto a réplica estava desligada"
+          ],
+          "correta": 0,
+          "explicacao": "A réplica guarda \"arquivo X, posição Y\" e pede ao master a continuação dali; se o binlog X foi apagado, o master responde 1236. \"Perdeu o sync\" é o sintoma, não o mecanismo, e não há conserto incremental: é preciso reconstruir a réplica com um dump ou snapshot novo. Prevenção: nunca apagar binlog que a réplica ainda não leu.",
+          "licao": "l-repl"
+        },
+        {
+          "id": "sre-4",
+          "pergunta": "A VM do `proxy-01` tem backup diário e restaura em 1 h. Isso elimina o `proxy-01` como ponto único de falha?",
+          "opcoes": [
+            "Sim, porque com backup testado o serviço sempre volta, e isso é o que define redundância",
+            "Sim, desde que o RTO de 1 h esteja documentado e aprovado pelo negócio",
+            "Não: o backup encurta a volta, mas não evita a queda; isso exige redundância atrás do LB",
+            "Não, porque o backup é diário; com snapshots de hora em hora o SPOF deixaria de existir"
+          ],
+          "correta": 2,
+          "explicacao": "Recuperar e eliminar o risco são coisas diferentes: com backup, a queda do `proxy-01` ainda tira do ar os sites, o Rundeck e o Grafana por 1 h. Eliminar o SPOF significa que a falha de uma peça não derruba o serviço, como dois Traefik atrás do LB da OCI. Snapshot mais frequente melhora o RPO, não a disponibilidade.",
+          "licao": "l-spof"
+        },
+        {
+          "id": "sre-5",
+          "pergunta": "Você vai trocar um middleware do Traefik que afeta todos os sites. Qual sequência reduz mais o risco técnico?",
+          "opcoes": [
+            "HML, rollback pronto, um router primeiro (canário), checar curl e 5xx, depois o resto",
+            "Aplicar em todos às 22h, quando há pouca gente usando, e conferir os sites na manhã seguinte",
+            "Comunicar a janela, aplicar em todos os routers e reiniciar o Traefik para garantir a carga",
+            "Aplicar direto em prd com o log do Traefik em modo debug para enxergar qualquer erro"
+          ],
+          "correta": 0,
+          "explicacao": "A metade técnica é limitar o estrago e poder voltar rápido: rollback pronto antes de começar, canário em um router e verificação imediata. Fora do horário há menos gente afetada, mas também ninguém para perceber; sem monitoramento logo depois, o problema dura a noite toda. Comunicar a janela é necessário, mas não reduz o risco da mudança.",
+          "licao": "l-mudanca"
+        },
+        {
+          "id": "sre-6",
+          "pergunta": "Usuários dizem que a app ficou lenta às 14h. Por onde começar, e por quê?",
+          "opcoes": [
+            "Pelos traces, porque mostram o tempo real, enquanto as métricas são dados estáticos",
+            "Pelos logs de todas as apps desde as 14h, porque só eles têm o detalhe do erro",
+            "Pelo postmortem do último incidente parecido, que já indica a causa provável",
+            "Pelas métricas, para achar o que mudou às 14h, e então pelos logs da janela"
+          ],
+          "correta": 3,
+          "explicacao": "Métricas são séries temporais baratas e respondem *quando* e *quanto*: CPU, latência, conexões ao banco mostram o que mudou às 14h. Com o componente e a janela em mãos, os logs dizem *o que* aconteceu. Métricas não são estáticas, e traces não são \"tempo real\": eles mostram *onde* o tempo de uma requisição foi gasto.",
+          "licao": "l-obs"
+        },
+        {
+          "id": "sre-7",
+          "pergunta": "Um dev commitou a senha do Postgres de prd num repositório, e ela ficou lá por uma semana. Qual é o primeiro passo?",
+          "opcoes": [
+            "Rotacionar a senha, atualizar o cofre e redeployar quem a usa, supondo que já foi usada",
+            "Reescrever o histórico com `git filter-repo` e dar force push para ninguém mais ver",
+            "Tornar o repositório privado e revisar a lista de quem tem acesso a ele",
+            "Rodar o gitleaks no repositório para descobrir se há outros segredos expostos"
+          ],
+          "correta": 0,
+          "explicacao": "Clones, PRs e caches já têm a senha, então limpar o histórico ou fechar o repositório não a torna secreta de novo. O que neutraliza o vazamento é a senha antiga deixar de funcionar, seguido de olhar os logs de acesso desde o commit. Limpar o histórico e adotar gitleaks vêm depois, como higiene e prevenção.",
+          "licao": "l-vazou"
+        },
+        {
+          "id": "sre-8",
+          "pergunta": "No postmortem da queda do ERP causada pelo stop agendado no Rundeck, qual registro de causa segue o formato certo?",
+          "opcoes": [
+            "O responsável reativou os jobs de stop sem avisar ninguém e sem conferir quais servidores eles desligavam",
+            "Falha no Rundeck durante a execução dos jobs agendados de economia de custo da OCI",
+            "Jobs de stop reativados incluíam `erp-01` e `erp-02`, sem trava contra desligar servidores do ERP",
+            "Instabilidade na OCI desligou `erp-01` e `erp-02` no fim da tarde e derrubou o ERP"
+          ],
+          "correta": 2,
+          "explicacao": "A causa num postmortem é o mecanismo do sistema que permitiu o erro, sem culpados: aqui, jobs que podiam desligar servidores de prd sem nenhuma trava. Apontar a pessoa não gera ação que evite a repetição. \"Falha no Rundeck\" é vago, e culpar a OCI está errado: o Rundeck fez exatamente o que estava agendado.",
+          "licao": "l-postmortem"
+        }
+      ]
+    },
+    {
+      "capitulo": "cap-iac",
+      "perguntas": [
+        {
+          "id": "iac-1",
+          "pergunta": "Uma task do Ansible usa `shell: useradd deploy`. Na segunda execução do playbook ela falha. Por quê, e qual é a correção?",
+          "opcoes": [
+            "O shell não confere o estado; o módulo `user` só cria o usuário se ele faltar",
+            "O Ansible não guarda state entre execuções; é preciso configurar um backend remoto para ele",
+            "Faltou `become: true` na task, que só é herdado na primeira execução do playbook",
+            "Faltou `ignore_errors: true`, que é a forma idempotente de lidar com o usuário já existente"
+          ],
+          "correta": 0,
+          "explicacao": "Os módulos `shell` e `command` só executam o comando, sem saber o efeito, então rodam sempre; o `useradd` falha porque o usuário já existe. O módulo `user` compara o estado desejado com o atual e só age na diferença. `ignore_errors` esconde a falha, mas a task continua não idempotente e passa a mascarar erros reais.",
+          "licao": "l-idem"
+        },
+        {
+          "id": "iac-2",
+          "pergunta": "Alguém abriu a porta 8080 na Security List pelo console. Essa Security List está no Terraform sem essa regra. O que o próximo `terraform plan` mostra?",
+          "opcoes": [
+            "Uma alteração que remove a regra, voltando ao que o código declara",
+            "Nada, porque o Terraform só compara o que ele mesmo criou ou alterou",
+            "Um erro de state corrompido, pedindo um `terraform import` da regra",
+            "Uma sugestão de incluir a nova regra no código, para manter o ambiente"
+          ],
+          "correta": 0,
+          "explicacao": "No refresh, o Terraform lê o estado real do recurso que ele gerencia e compara com o código; a regra a mais é drift, e o plan propõe desfazê-la. Isso não é erro de state: o recurso continua o mesmo, só mudou um atributo. O Terraform nunca altera o código sozinho; se a regra deve ficar, alguém precisa colocá-la no `.tf`.",
+          "licao": "l-idem"
+        },
+        {
+          "id": "iac-3",
+          "pergunta": "Por que não versionar o `terraform.tfstate` no git do projeto?",
+          "opcoes": [
+            "O Terraform recria o state do zero a cada plan, lendo a nuvem, e o arquivo fica inútil",
+            "O state muda de formato a cada versão do provider e quebra os merges do repositório",
+            "O state cresce demais com o tempo e estoura o limite de tamanho do Azure Repos",
+            "Guarda segredos em texto puro, e o git não tem trava contra dois applies simultâneos"
+          ],
+          "correta": 3,
+          "explicacao": "O state contém IDs e atributos, inclusive senhas e chaves, em texto puro: commitá-lo é como commitar um `.env`. E o git não tem trava: duas pessoas com cópias diferentes podem aplicar ao mesmo tempo e destruir recursos. O Terraform não reconstrói o state sozinho; sem ele, não sabe o que já existe.",
+          "licao": "l-state"
+        },
+        {
+          "id": "iac-4",
+          "pergunta": "Duas pessoas rodam `terraform apply` ao mesmo tempo no mesmo projeto. O que o locking do backend remoto evita?",
+          "opcoes": [
+            "Que alguém sem permissão no compartment consiga ler o conteúdo do state remoto",
+            "Que um segundo apply rode junto com o primeiro e grave o state por cima",
+            "Que o plan deixe de mostrar mudanças feitas à mão no console da OCI",
+            "Que o state seja gravado sem criptografia no bucket do Object Storage"
+          ],
+          "correta": 1,
+          "explicacao": "O locking é uma trava: enquanto um plan ou apply está rodando, outro recebe erro de lock em vez de agir sobre um state que está mudando. É a mesma ideia da reserva de tag no git contra a corrida das versões. Controle de leitura e criptografia são outras propriedades do backend, e o drift aparece no plan com ou sem trava.",
+          "licao": "l-state"
+        },
+        {
+          "id": "iac-5",
+          "pergunta": "Você quer trazer para o Terraform o WAF, o LB e a VCN que já foram criados à mão na OCI. Qual é o atalho?",
+          "opcoes": [
+            "Escrever os `.tf` e rodar `apply`: o Terraform reconhece os recursos existentes pelo nome",
+            "Rodar `terraform plan -refresh-only` num projeto vazio, que importa o compartment inteiro",
+            "Resource Discovery do Resource Manager no compartment, que gera código e state",
+            "Exportar o compartment pelo console da OCI em JSON e renomear o arquivo para `.tf`"
+          ],
+          "correta": 2,
+          "explicacao": "O Resource Discovery lê os recursos de um compartment e gera a configuração Terraform e o state correspondente, que vira o ponto de partida. Sem state, um `apply` tenta criar recursos novos e duplicados, porque o Terraform não associa nada pelo nome. O `-refresh-only` só atualiza o state de recursos que ele já conhece.",
+          "licao": "l-state"
+        },
+        {
+          "id": "iac-6",
+          "pergunta": "A configuração do Traefik do `proxy-01` vem do git. Há uma emergência às 23h e não há ninguém para revisar o PR. Qual é o combinado?",
+          "opcoes": [
+            "Saída de emergência documentada: corrigir no servidor e commitar depois",
+            "Esperar o revisor da manhã, porque nenhuma mudança pode entrar fora de um PR aprovado",
+            "Corrigir no servidor e deixar assim, já que a pipeline só roda no próximo PR que alguém abrir",
+            "Desligar a pipeline do Traefik para que ela não sobrescreva a correção feita no servidor"
+          ],
+          "correta": 0,
+          "explicacao": "Restaurar o serviço vem primeiro, e a saída de emergência existe para isso, desde que a mudança volte ao repositório. Deixar só no servidor cria drift: a próxima execução da pipeline sobrescreve a correção e o problema volta. Desligar a pipeline troca uma emergência por uma fonte da verdade que deixou de ser verdade.",
+          "licao": "l-gitops"
+        },
+        {
+          "id": "iac-7",
+          "pergunta": "O Postgres só deve aceitar conexões das VMs da app, cujos IPs mudam quando elas são recriadas. O que usar na OCI?",
+          "opcoes": [
+            "Uma Security List na subnet de dados com os IPs atuais das VMs da app",
+            "Uma Security List stateless na subnet de dados, só com a regra de ida",
+            "Uma regra na route table da subnet de dados que aceita só a subnet da app",
+            "Uma NSG no banco com regra de entrada que tem a NSG da app como origem"
+          ],
+          "correta": 3,
+          "explicacao": "A NSG vale só para as VNICs associadas e pode usar outra NSG como origem, então a regra continua certa quando as VMs da app mudam de IP. A Security List vale para a subnet inteira e trabalha com CIDR, exigindo manutenção a cada IP novo. Route table decide para onde o tráfego vai, não o que é permitido.",
+          "licao": "l-nsg"
+        },
+        {
+          "id": "iac-8",
+          "pergunta": "Uma regra de entrada **stateless** libera a 5432 no banco, mas os clientes dão timeout. O que falta?",
+          "opcoes": [
+            "Nada no banco: falta uma regra de entrada stateful no lado da subnet dos clientes",
+            "Uma regra de saída para as respostas, que stateless não libera sozinha",
+            "Trocar para a porta 443, que a OCI libera por padrão em todas as subnets",
+            "Reiniciar o Postgres, que só passa a escutar depois de a regra ser criada"
+          ],
+          "correta": 1,
+          "explicacao": "Numa regra stateless cada pacote é avaliado sozinho: o SYN entra, mas o SYN-ACK de volta precisa de uma regra de saída própria (para as portas efêmeras do cliente). Sem ela a resposta é descartada em silêncio, e o cliente vê timeout. Com regra stateful, a resposta seria liberada automaticamente, e só a regra de ida bastaria.",
+          "licao": "l-nsg"
+        }
+      ]
+    },
+    {
+      "capitulo": "cap-k8s",
+      "perguntas": [
+        {
+          "id": "k8s-1",
+          "pergunta": "Equipe de uma pessoa e meia, cerca de 30 containers em compose espalhados por 4 VMs, sem necessidade de autoscaling. O que faz mais sentido agora?",
+          "opcoes": [
+            "Subir um cluster k3s próprio nas VMs, já que ele é leve e quase não exige operação",
+            "Continuar com compose, git e Ansible: operar Kubernetes custaria mais do que entrega",
+            "Migrar já para o OKE, porque com o control plane gerenciado não sobra nada para operar",
+            "Adotar Docker Swarm, que dá o autoscaling do Kubernetes sem a complexidade dele"
+          ],
+          "correta": 1,
+          "explicacao": "Kubernetes operado por uma equipe tão pequena é risco, não ganho: rede de pods, ingress, armazenamento e atualizações continuam sendo seus, mesmo no OKE. O k3s é leve para instalar, não para operar. Até a dor aparecer, compose com git e Ansible resolve, e o IaC feito agora continua valendo numa migração.",
+          "licao": "l-k8s"
+        },
+        {
+          "id": "k8s-2",
+          "pergunta": "Se o Kubernetes passar a fazer sentido, por que o OKE em vez de um cluster montado à mão nas VMs?",
+          "opcoes": [
+            "A OCI opera o control plane (API server, etcd, scheduler), a parte mais difícil de manter",
+            "O OKE não usa a VCN, então os pods ficam fora das Security Lists e NSGs da tenancy",
+            "Só o OKE consegue baixar imagens do OCIR, por causa da autenticação própria da OCI nos nós",
+            "O OKE dispensa YAML: as aplicações são configuradas só pelo console da OCI"
+          ],
+          "correta": 0,
+          "explicacao": "No OKE a Oracle cuida do control plane, incluindo o etcd e as atualizações dele, que é onde um cluster montado à mão mais dá trabalho e mais assusta. Os nós e os pods continuam na sua VCN, sujeitos às regras de rede. Qualquer Kubernetes baixa do OCIR com credencial, e as aplicações continuam descritas em manifestos.",
+          "licao": "l-k8s"
+        },
+        {
+          "id": "k8s-3",
+          "pergunta": "Num cluster Kubernetes, o etcd do control plane fica fora do ar. O que acontece com os pods que já estão rodando nos nós?",
+          "opcoes": [
+            "Param todos na hora, porque cada requisição dos pods passa pelo etcd",
+            "Nada muda, porque o kubelet de cada nó assume o papel do etcd até ele voltar",
+            "Continuam rodando, mas o cluster não aceita mudanças nem reagenda pods se um nó cair",
+            "São movidos automaticamente para outro cluster configurado como reserva"
+          ],
+          "correta": 2,
+          "explicacao": "O kubelet de cada nó mantém rodando os containers que já recebeu; o tráfego das aplicações não passa pelo etcd. O que se perde é o cérebro: sem o etcd, o API server não grava nada, então não há deploy, escala nem reagendamento. É por isso que o control plane é a parte que vale a pena terceirizar.",
+          "licao": "l-k8s"
+        },
+        {
+          "id": "k8s-4",
+          "pergunta": "Qual destes sinais mais justifica começar a considerar Kubernetes?",
+          "opcoes": [
+            "Querer versionar a configuração dos serviços, coisa que um arquivo de compose não permite",
+            "Distribuir containers à mão entre hosts virou rotina e há picos que pedem autoscaling",
+            "Precisar servir vários domínios com HTTPS no mesmo IP, o que o Traefik sozinho não faz",
+            "Ter o `proxy-01` como ponto único de falha, um problema que só o Kubernetes resolve"
+          ],
+          "correta": 1,
+          "explicacao": "Os critérios da trilha são dor real de distribuir containers entre hosts, necessidade de autoscaling ou equipe de três pessoas ou mais. O compose é um arquivo, versionável no git como qualquer outro; vários domínios no mesmo IP é SNI, que o Traefik e o LB já fazem. O SPOF do `proxy-01` se resolve com duas instâncias atrás do LB, sem Kubernetes.",
+          "licao": "l-k8s"
+        },
+        {
+          "id": "k8s-5",
+          "pergunta": "Se um dia houver migração para Kubernetes, o que acontece com o IaC feito agora (git, Ansible, Terraform)?",
+          "opcoes": [
+            "Vira trabalho perdido, porque o Kubernetes substitui o Terraform e o Ansible pelos próprios manifestos YAML",
+            "Continua valendo: rede, LB, WAF e registry no Terraform e o hábito do PR são a base do cluster",
+            "Só o Ansible é aproveitado, porque é ele que instala o Kubernetes nas VMs; o resto é refeito",
+            "Só o Terraform é aproveitado, porque o Kubernetes não usa git para guardar a configuração"
+          ],
+          "correta": 1,
+          "explicacao": "O cluster precisa da mesma rede, do mesmo LB e WAF e do mesmo registry, e no OKE o próprio cluster costuma ser criado pelo Terraform. Os manifestos do Kubernetes também vivem no git e passam por PR, então o hábito de mudar pelo repositório é o que se leva junto. Kubernetes descreve as cargas, não a infraestrutura em volta delas.",
+          "licao": "l-k8s"
+        }
+      ]
+    }
+  ]
+}

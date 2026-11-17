@@ -1,0 +1,1058 @@
+{
+  "capitulos": [
+    {
+      "id": "cap-redes",
+      "numero": 1,
+      "titulo": "Redes",
+      "subtitulo": "camadas 3 a 7",
+      "resumo": "Como uma conexão nasce (TCP), como o pedido é respondido (HTTP), como o certificado certo é escolhido (TLS/SNI) e como o nome vira IP (DNS). Saber ler cada erro dessas camadas diz onde procurar antes de testar qualquer coisa.",
+      "licoes": [
+        {
+          "id": "l-tcp",
+          "titulo": "O handshake TCP e os três erros de conexão",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Cada erro de conexão é uma forma diferente do diálogo `SYN` / `SYN-ACK` / `ACK` falhar, e a forma da falha já diz em qual lugar procurar."
+            },
+            {
+              "tipo": "p",
+              "texto": "Toda conexão TCP começa com três pacotes: o cliente manda `SYN`, o servidor responde `SYN-ACK`, o cliente confirma com `ACK`. Cada erro de conexão é uma forma diferente desse diálogo falhar, e **cada uma aponta para um lugar diferente**."
+            },
+            {
+              "tipo": "tabela",
+              "colunas": [
+                "Erro",
+                "O que acontece no fio",
+                "Significa",
+                "Onde olhar"
+              ],
+              "linhas": [
+                [
+                  "`Connection refused`",
+                  "`SYN →` `← RST`",
+                  "O host está vivo, mas nada escuta na porta",
+                  "Serviço caído, porta errada, app escutando só em 127.0.0.1. Também o REJECT padrão do iptables, que responde como se a porta estivesse fechada"
+                ],
+                [
+                  "`No route to host`",
+                  "`SYN →` `← ICMP unreachable`",
+                  "Alguém no caminho recusou ativamente",
+                  "Firewall com REJECT do tipo `icmp-host-prohibited` (o padrão no RHEL/Oracle Linux), rota inexistente"
+                ],
+                [
+                  "Timeout",
+                  "`SYN →` silêncio, retransmissões",
+                  "O pacote sumiu, ninguém respondeu",
+                  "Firewall com DROP, security list/NSG da OCI, host desligado"
+                ]
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Pense num telefonema. **Refused**: alguém atende e diz “não tem ninguém com esse ramal aqui” (o host existe, a porta não). **No route to host**: a operadora avisa “esse número não pode ser completado” (alguém no caminho respondeu recusando). **Timeout**: o telefone chama, chama, e ninguém atende (o pacote foi descartado em silêncio, então o cliente só desiste depois de várias tentativas)."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Detalhe do REJECT",
+              "texto": "O REJECT do iptables escolhe como recusar. O padrão (`icmp-port-unreachable`) aparece no cliente como **Connection refused**, igual a uma porta fechada. Com `--reject-with icmp-host-prohibited`, que é a regra de fábrica no RHEL e no Oracle Linux, aparece como **No route to host**. Já o DROP não responde nada, e o resultado é **timeout**."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "nc -vz host 5432                 # testa a porta e mostra o erro exato\nss -ltnp                         # no servidor: o que está escutando, e em qual IP\nsudo tcpdump -ni any port 5432   # vê SYN, RST e ICMP acontecendo de verdade"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Cenário · db-01",
+              "texto": "O `app-01` tenta falar com o Postgres do `db-01` e recebe “No route to host” na hora, enquanto o `ping` responde. Pela tabela acima, o erro já diz que é firewall (um REJECT do iptables respondendo com ICMP), sem precisar testar mais nada: falta liberar a origem no iptables e no `pg_hba.conf`."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "teste",
+              "titulo": "Erro comum",
+              "texto": "É comum achar que, quando a conexão falha, basta passar um checklist genérico (rota, firewall, ufw). Na verdade, o próprio erro já diz em qual camada procurar: ler a mensagem antes de testar economiza a maior parte do diagnóstico."
+            }
+          ]
+        },
+        {
+          "id": "l-http",
+          "titulo": "Códigos HTTP",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "4xx é problema no pedido, 5xx é problema do lado do servidor; atrás de um proxy, 502 e 504 são o “refused” e o “timeout” do HTTP."
+            },
+            {
+              "tipo": "p",
+              "texto": "A regra geral: **4xx** é problema no pedido (quem pediu, o quê, com qual permissão); **5xx** é problema do lado do servidor. Atrás de um proxy como o Traefik, os 5xx dizem algo sobre o backend."
+            },
+            {
+              "tipo": "tabela",
+              "colunas": [
+                "Código",
+                "Nome",
+                "Na prática, no seu ambiente"
+              ],
+              "linhas": [
+                [
+                  "`200`",
+                  "OK",
+                  "Deu certo"
+                ],
+                [
+                  "`301` / `302`",
+                  "Redirect",
+                  "Permanente / temporário. Ex.: http → https"
+                ],
+                [
+                  "`401`",
+                  "Unauthorized",
+                  "Não autenticou (sem token, token vencido)"
+                ],
+                [
+                  "`403`",
+                  "Forbidden",
+                  "Autenticou, mas não tem permissão. Também é o que o `ipAllowList` do Traefik devolve fora da rede interna"
+                ],
+                [
+                  "`404`",
+                  "Not Found",
+                  "No Traefik: **nenhum router casou** com o host ou caminho. Antes de culpar a app, confira a regra do router"
+                ],
+                [
+                  "`429`",
+                  "Too Many Requests",
+                  "Rate limit (seu ou de uma API externa)"
+                ],
+                [
+                  "`500`",
+                  "Internal Server Error",
+                  "A app quebrou ao processar. Olhe o log da app"
+                ],
+                [
+                  "`502`",
+                  "Bad Gateway",
+                  "O proxy tentou o backend e recebeu erro ou recusa. Geralmente container caído ou porta errada (o “refused” do HTTP)"
+                ],
+                [
+                  "`503`",
+                  "Service Unavailable",
+                  "Nenhum backend saudável, ou manutenção"
+                ],
+                [
+                  "`504`",
+                  "Gateway Timeout",
+                  "O backend não respondeu a tempo. App travada, banco lento ou DROP no caminho (o “timeout” do HTTP)"
+                ]
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "O proxy é uma recepcionista que repassa pedidos para os setores. **502**: ela liga para o setor e ouve “não existe esse ramal” ou uma resposta sem sentido, e volta dizendo que deu erro. **504**: ela liga, fica esperando na linha, e desiste quando o tempo dela acaba. **404 no Traefik**: ela nem sabe para qual setor mandar, porque nenhuma regra casou com o pedido."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "teste",
+              "titulo": "Erro comum",
+              "texto": "É comum achar que 502 e 504 são a mesma coisa, “o backend deu erro”. Na verdade, eles repetem a lição anterior: 502 costuma ser o *refused* (o proxy chegou e levou recusa ou resposta inválida), 504 costuma ser o *timeout* (o proxy esperou e desistiu)."
+            }
+          ]
+        },
+        {
+          "id": "l-tls",
+          "titulo": "TLS e SNI",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "O SNI é o nome do site que o cliente manda em aberto logo no primeiro pacote do TLS, para que um único IP:443 saiba qual certificado apresentar."
+            },
+            {
+              "tipo": "p",
+              "texto": "Antes de qualquer criptografia, o servidor precisa escolher qual certificado apresentar. No primeiro pacote do TLS (o *ClientHello*), o cliente manda o nome do site em texto aberto. Esse campo é o **SNI** (*Server Name Indication*). Com ele, um único IP na porta 443 serve vários sites, cada um com seu certificado. Sem SNI, seria um certificado por IP."
+            },
+            {
+              "tipo": "p",
+              "texto": "SNI não tem relação com wildcard. Wildcard (`*.exemplo.com.br`) é um certificado que cobre vários subdomínios. SNI é o mecanismo que escolhe qual certificado usar."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Um prédio com um único endereço (o IP) e vários escritórios (os sites). Na portaria, antes de qualquer conversa reservada, o visitante diz em voz alta “vim ao escritório X” (o SNI), e o porteiro entrega o crachá daquele escritório (o certificado). O wildcard seria um crachá que abre todas as salas de um mesmo andar; quem decide qual crachá entregar continua sendo o nome dito na portaria."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "# qual certificado o servidor entrega para esse nome, e até quando vale\nopenssl s_client -connect IP_DO_LB:443 -servername site.com.br </dev/null 2>/dev/null \\\n  | openssl x509 -noout -subject -issuer -dates"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Cenário · WAF da OCI",
+              "texto": "Um listener 443 atendendo `loja.exemplo.com.br`, `blog.exemplo.com.br` e `portal.exemplo.com.br` no mesmo IP só funciona porque o LB lê o SNI e escolhe, entre os certificados importados, o de cada nome."
+            }
+          ]
+        },
+        {
+          "id": "l-dns",
+          "titulo": "DNS",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Quase sempre o DNS responde; o problema é responder o IP errado para quem pergunta, então compare a resposta de cada servidor DNS."
+            },
+            {
+              "tipo": "p",
+              "texto": "Na maioria dos incidentes, o DNS responde, mas com o IP errado para quem pergunta. Sempre compare o que cada servidor DNS responde."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "dig +short site.com.br              # o que o seu resolver responde\ndig +short site.com.br @8.8.8.8     # o que a internet vê\ndig +short site.com.br @IP_DO_DC    # o que a rede interna vê\ndig +trace site.com.br              # o caminho inteiro, da raiz até a resposta"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "São duas listas telefônicas: a da portaria da empresa (DNS interno) e a lista pública (internet). O mesmo nome pode ter um número em cada uma, de propósito. Quando alguém diz “o número está errado”, a primeira pergunta é: em qual lista você olhou?"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Cenário · exemplo.com.br",
+              "texto": "O `exemplo.com.br` é split-horizon: o DC interno responde uma coisa e a internet outra. Se o DNS dos DCs trava (por exemplo, uma zona presa em *zone locked*), só a visão interna quebra: de fora, pelo 4G, tudo abre normalmente."
+            }
+          ]
+        },
+        {
+          "id": "l-roteiro",
+          "titulo": "Roteiro: “o site não abre”",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Desça as camadas na ordem (escopo, DNS, conexão/TLS, código HTTP, backend direto, logs) e restaure o serviço antes de caçar a causa."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": true,
+              "itens": [
+                "**Escopo primeiro.** Só essa pessoa ou todo mundo? É a pergunta mais barata e corta metade das hipóteses.",
+                "**DNS.** `dig`: resolve, e para o IP certo (interno ou externo)?",
+                "**Uma chamada que mostra tudo:** `curl -vI https://site` mostra DNS, conexão, TLS e o código HTTP de uma vez.",
+                "**O código diz a camada.** 404 = router, 403 = allowlist, 502/504 = backend, erro de TLS = certificado/SNI.",
+                "**Pule o proxy.** Do `proxy-01`, `curl` direto no IP:porta do backend. Se funciona, o problema está no Traefik ou antes dele.",
+                "**Logs.** Access log do Traefik, depois o log do container.",
+                "**Restaure antes de investigar.** Se der para voltar o serviço (reiniciar, reverter), volte primeiro. A causa raiz vem depois, com calma."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "É como achar onde um cano entupiu: você abre a torneira em pontos cada vez mais perto da caixa d'água. O ponto em que a água volta a sair diz em qual trecho está o problema. “Pular o proxy” é abrir a torneira logo depois do registro."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap-linux",
+      "numero": 2,
+      "titulo": "Linux por dentro",
+      "subtitulo": "",
+      "resumo": "O que acontece embaixo dos comandos do dia a dia: como o sistema de arquivos conta espaço e arquivos, como a máscara da ACL limita permissões e como ler o que o systemd diz sobre um serviço.",
+      "licoes": [
+        {
+          "id": "l-dfdu",
+          "titulo": "df mostra cheio, du soma menos",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Apagar um arquivo só tira o nome dele do diretório; o espaço só volta quando o último processo que o mantém aberto o fecha."
+            },
+            {
+              "tipo": "p",
+              "texto": "No Linux, apagar um arquivo só remove o nome dele do diretório. Os blocos só são liberados quando **nenhum processo mantém o arquivo aberto**. Se uma app continua escrevendo num log que foi apagado ou rotacionado, o `du` (que percorre nomes) não enxerga o arquivo, mas o `df` (que pergunta ao sistema de arquivos) continua contando o espaço."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Num arquivo de escritório, você arranca a etiqueta de uma pasta do índice, mas um colega ainda está com a pasta aberta na mesa dele. Quem conta pelo índice (o `du`) acha que ela sumiu; quem mede a gaveta (o `df`) vê que ela continua ocupando espaço. A gaveta só esvazia quando o colega devolve a pasta (o processo fecha o arquivo ou é reiniciado)."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "sudo lsof +L1                        # arquivos apagados que ainda estão abertos\nsudo truncate -s 0 /proc/PID/fd/N    # zera o arquivo sem matar o processo\n# ou: reiniciar o processo, que fecha o arquivo e libera o espaço"
+            },
+            {
+              "tipo": "p",
+              "texto": "Outra causa menos comum: arquivos gravados num diretório **antes** de um disco ser montado em cima dele. Eles ficam escondidos embaixo do ponto de montagem."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "teste",
+              "titulo": "Erro comum",
+              "texto": "É comum achar que a diferença entre `df` e `du` vem de LVM ou volumes. Na verdade, LVM explica a diferença entre o tamanho do disco e o `df`; a diferença entre `df` e `du` quase sempre é arquivo apagado que continua aberto por algum processo."
+            }
+          ]
+        },
+        {
+          "id": "l-inodes",
+          "titulo": "Disco com espaço livre, mas “No space left on device”",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Espaço e quantidade de arquivos são dois limites separados: cada arquivo gasta um inode, e os inodes podem acabar antes dos blocos."
+            },
+            {
+              "tipo": "p",
+              "texto": "Cada arquivo gasta um **inode** (a ficha com dono, permissões e onde estão os blocos), não importa o tamanho. O número de inodes é fixo na formatação. Milhões de arquivos pequenos esgotam os inodes com o disco ainda vazio."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Uma biblioteca com prateleiras sobrando, mas sem fichas de catálogo em branco. Sem ficha, nenhum livro novo pode entrar, por menor que seja. Os inodes são as fichas, os blocos são as prateleiras."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "df -i                                           # uso de inodes por partição\nsudo du --inodes -x / 2>/dev/null | sort -n | tail   # quem tem mais arquivos\nsudo tune2fs -l /dev/sdX1 | grep -i reserved    # blocos reservados ao root (ext4)"
+            },
+            {
+              "tipo": "p",
+              "texto": "Outra causa: o ext4 reserva 5% do disco para o root. Uma app que não roda como root recebe “sem espaço” antes de o disco chegar a 100%."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Cenário · legado-01",
+              "texto": "O `/tmp` do sistema legado no `legado-01` cresce sem limpeza até passar de 70 GB. Se fossem milhões de arquivos pequenos, o problema apareceria pelo `df -i` antes do `df -h`."
+            }
+          ]
+        },
+        {
+          "id": "l-acl",
+          "titulo": "ACL POSIX e a máscara",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "A máscara é o teto das permissões da ACL: se um deploy baixa a máscara, quem tinha escrita perde, mesmo com a ACL intacta."
+            },
+            {
+              "tipo": "p",
+              "texto": "A ACL acrescenta permissões para usuários e grupos específicos, além do trio dono/grupo/outros. A **máscara** é o teto: nenhuma entrada da ACL (fora o dono) recebe mais do que a máscara permite. Quando existe ACL, **os bits de grupo que o `ls -l` mostra são a máscara**."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "A máscara é o teto de uma sala: cada pessoa tem a sua altura (a permissão da entrada na ACL), mas ninguém fica de pé mais alto do que o teto. Se alguém baixa o teto, todo mundo passa a ficar curvado, mesmo sem ninguém ter encolhido. Por isso o `getfacl` mostra a permissão escrita e, ao lado, a `#effective` (a altura que cabe sob o teto)."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "$ getfacl /opt/app-loja\nuser::rwx\nuser:dev1:rwx        #effective:r-x   <- a máscara cortou o w\ngroup::r-x\nmask::r-x\nother::---"
+            },
+            {
+              "tipo": "p",
+              "texto": "Por isso um `chmod 750` (que um deploy pode rodar) não apaga a ACL, mas baixa a máscara para `r-x`, e quem tinha escrita perde."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "setfacl -m m::rwx /caminho            # restaura a máscara\nsetfacl -d -m u:dev1:rwx /caminho     # ACL padrão: arquivos novos já nascem com ela"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Cenário · hml-01",
+              "texto": "“A máscara cai com a pipeline”: o deploy refaz as permissões e o acesso do `dev1` e do `dev2` some, mesmo com a ACL intacta."
+            }
+          ]
+        },
+        {
+          "id": "l-systemd",
+          "titulo": "systemd: serviço que reinicia sozinho",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Antes de mexer num serviço que reinicia sozinho, leia o estado, o log, quantas vezes ele reiniciou e como ele morreu."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "systemctl status svc                       # estado, código de saída, últimas linhas\njournalctl -u svc -e                       # log completo, já no fim\njournalctl -u svc -f                       # acompanhar ao vivo\njournalctl -u svc --since \"10 min ago\"\nsystemctl show svc -p NRestarts,Restart    # quantas vezes reiniciou e a política\nsystemctl cat svc                          # a unit que está valendo, com overrides"
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "`start` liga agora. `enable` cria um link no target para ligar no boot. `enable --now` faz os dois.",
+                "O código de saída diz muito: `137` = morto por SIGKILL (muitas vezes OOM), `143` = SIGTERM, `1` = a própria app desistiu."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Por que 137 e 143",
+              "texto": "O mecanismo por trás de 137 e 143: pela convenção do shell (e do Docker), quando um processo morre por um sinal, o código reportado é 128 + o número do sinal. SIGKILL é o sinal 9 (128 + 9 = 137) e SIGTERM é o 15 (128 + 15 = 143). No `systemctl status`, quando o processo principal morre por sinal, o mesmo fato aparece escrito de outro jeito: `code=killed, status=9/KILL`."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "`start` é ligar o aparelho agora; `enable` é programar o timer para ele ligar sozinho toda vez que a energia voltar. Um não implica o outro."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap-git",
+      "numero": 3,
+      "titulo": "Git e containers",
+      "subtitulo": "",
+      "resumo": "O que o git e o Docker fazem por baixo: reescrita de histórico no rebase, camadas que guardam segredos, rede entre containers, tags que se movem e por que o grupo docker equivale a root.",
+      "licoes": [
+        {
+          "id": "l-rebase",
+          "titulo": "Merge × rebase",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Merge junta histórias sem reescrever nada; rebase recria os seus commits com hashes novos, por isso só se usa em commits que ninguém mais baixou."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**Merge** cria um commit novo que une as duas histórias. Nada é reescrito.",
+                "**Rebase** reaplica os seus commits por cima da outra branch. Eles viram commits novos, com hashes novos, e o histórico fica linear."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Merge é construir uma ponte entre duas estradas: as duas continuam existindo como eram. Rebase é tirar uma fotocópia de cada trecho da sua estrada e colar no fim da outra: o desenho é o mesmo, mas são folhas novas (hashes novos). Quem tinha as folhas antigas na mão agora tem uma versão que não bate com a sua."
+            },
+            {
+              "tipo": "p",
+              "texto": "**Regra de ouro:** nunca faça rebase de commits que outras pessoas já baixaram. A cópia delas diverge da sua, e aí vem o `push --force` que apaga o trabalho de alguém. Rebase serve para arrumar a sua branch local antes do PR."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "git reflog        # rede de segurança: mostra para onde o HEAD apontou, inclusive antes de um rebase errado"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "teste",
+              "titulo": "Erro comum",
+              "texto": "É comum achar que o rebase prioriza um lado (o seu ou o da outra branch) na hora do conflito. Na verdade, nenhum dos dois prioriza lado nenhum: conflito acontece nos dois, e quem decide é você."
+            }
+          ]
+        },
+        {
+          "id": "l-camadas",
+          "titulo": "Camadas da imagem e segredos",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Tudo o que entra numa camada ou nos metadados da imagem (inclusive `ENV` e `ARG`) pode ser lido por quem consegue dar pull nela."
+            },
+            {
+              "tipo": "p",
+              "texto": "Cada instrução do Dockerfile vira uma camada, e `ENV`/`ARG` ficam gravados nos metadados. Quem consegue dar pull da imagem no OCIR lê tudo:"
+            },
+            {
+              "tipo": "codigo",
+              "texto": "docker history --no-trunc imagem:tag\ndocker inspect imagem:tag | grep -i -A20 env"
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "Segredo em tempo de execução: vem de fora, do cofre (o que vocês já fazem com o fetch-secrets).",
+                "Segredo necessário no build: `RUN --mount=type=secret,id=npmrc ...`, que não fica em nenhuma camada."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "As camadas são folhas de papel vegetal empilhadas: a imagem final é o que se vê olhando a pilha de cima. Apagar algo numa folha de cima só cobre o desenho; ele continua na folha de baixo, e quem tem a pilha pode separar as folhas. Por isso um `rm` numa instrução posterior não remove um segredo copiado numa instrução anterior."
+            }
+          ]
+        },
+        {
+          "id": "l-dockernet",
+          "titulo": "Rede Docker",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Cada container tem a própria pilha de rede: entre eles se fala pelo nome do serviço, e `localhost` é sempre o próprio container."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "O compose já cria uma rede padrão para o projeto. Dentro dela, o DNS interno do Docker (`127.0.0.11`) resolve o **nome do serviço** para o IP do container.",
+                "Cada container tem o próprio *network namespace*. `localhost` dentro dele é o próprio container, nunca o host.",
+                "Para chegar no host a partir do container (no Linux): `extra_hosts: [\"host.docker.internal:host-gateway\"]`.",
+                "`internal: true` numa rede é uma opção real: ela **bloqueia a saída para fora**. Cuidado com o nome “internal” usado só como rótulo."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Cada container é um apartamento: “aqui em casa” (`localhost`) é sempre o próprio apartamento, nunca o prédio. Para falar com o vizinho, você usa o nome dele no interfone do condomínio (o DNS do Docker); para falar com a administração do prédio (o host), precisa de um ramal específico (`host.docker.internal`)."
+            }
+          ]
+        },
+        {
+          "id": "l-digest",
+          "titulo": "Tag × digest",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "A tag é um ponteiro que o último push pode mover; o digest é o hash do conteúdo e nunca muda."
+            },
+            {
+              "tipo": "p",
+              "texto": "Uma tag (`1.18.0`) é um **ponteiro móvel**: o último push vence. O **digest** (`sha256:…`) é o hash do conteúdo e nunca muda. Imutável de verdade é o digest."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "A tag é uma etiqueta adesiva: dá para descolar e colar em outra caixa. O digest é a impressão digital do conteúdo da caixa: se o conteúdo muda, a impressão é outra; se é a mesma impressão, é exatamente o mesmo conteúdo."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "docker inspect --format '{{index .RepoDigests 0}}' imagem:tag\n# deploy por digest: image: regiao.ocir.io/ns/app@sha256:..."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Cenário · OCIR",
+              "texto": "Duas runs de prd leram “última versão = 1.17” ao mesmo tempo, calcularam 1.18.0 e as duas deram push: uma **condição de corrida**. A correção (reservar a tag no git antes do push) funciona porque o push de uma tag que já existe falha de forma atômica."
+            }
+          ]
+        },
+        {
+          "id": "l-dockerroot",
+          "titulo": "Grupo docker = root",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Quem fala com o daemon do Docker manda um processo root fazer o que quiser, então estar no grupo `docker` equivale a ser root na máquina."
+            },
+            {
+              "tipo": "p",
+              "texto": "Quem fala com o daemon do Docker manda o root da máquina rodar containers do jeito que quiser. Um comando basta:"
+            },
+            {
+              "tipo": "codigo",
+              "texto": "docker run --rm -it -v /:/host alpine chroot /host   # shell de root no host"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "O daemon é um funcionário com a chave mestra do prédio que obedece a qualquer pessoa com acesso ao interfone dele. Dar o interfone a alguém (o grupo `docker`) é o mesmo que dar a chave mestra, por mais trancadas que estejam as salas (as ACLs)."
+            },
+            {
+              "tipo": "p",
+              "texto": "Por isso, colocar alguém no grupo `docker` anula qualquer ACL que você tenha feito. Alternativas com menor privilégio:"
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**Job no Rundeck** (“reiniciar container X de prd”): a pessoa clica, fica registrado quem fez e quando, e ela não precisa de shell.",
+                "**sudoers para um comando só:** `dev1 ALL=(root) NOPASSWD: /usr/bin/docker restart nome-do-container`"
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Cenário · app-01",
+              "texto": "Um dev (`dev2`) foi colocado no grupo docker do `app-01` para conseguir reiniciar containers. Na prática, ele é root lá, e a ACL em `/opt/app-*` não limita nada."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap-sre",
+      "numero": 4,
+      "titulo": "Confiabilidade",
+      "subtitulo": "",
+      "resumo": "Os conceitos que transformam “apagar incêndio” em decisão: quanto dado e tempo se aceita perder, por que a replicação quebra, onde estão os pontos únicos de falha e como mudar, observar e aprender com incidentes.",
+      "licoes": [
+        {
+          "id": "l-rpo",
+          "titulo": "RPO e RTO",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "RPO é quanto dado você aceita perder e RTO é quanto tempo até voltar; os dois são decisões de negócio, e só um restore cronometrado prova o RTO real."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**RPO** (*Recovery Point Objective*): quanto dado você aceita perder. Backup diário à meia-noite = até 24h perdidas.",
+                "**RTO** (*Recovery Time Objective*): quanto tempo até voltar a funcionar."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Você escreve num caderno e tira uma foto dele de tempos em tempos. Se o caderno molha, o **RPO** é o que você escreveu desde a última foto (perdeu); o **RTO** é quanto tempo leva para comprar um caderno novo e copiar tudo da foto até voltar a escrever."
+            },
+            {
+              "tipo": "p",
+              "texto": "Esses números são decisões de negócio, e é você quem leva a pergunta. Exemplo para o banco principal (MySQL): RPO de 15 min (guardando os binlogs fora do servidor) e RTO de 2h."
+            },
+            {
+              "tipo": "p",
+              "texto": "**Backup que nunca foi restaurado é só esperança.** A prova é restaurar periodicamente numa VM descartável, conferir os dados e cronometrar. O tempo medido é o seu RTO real."
+            }
+          ]
+        },
+        {
+          "id": "l-repl",
+          "titulo": "Replicação MySQL e o erro 1236",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "A réplica pede ao master a continuação a partir de um binlog e uma posição; se esse binlog foi apagado, não há como continuar e a réplica precisa ser reconstruída."
+            },
+            {
+              "tipo": "p",
+              "texto": "O master grava cada alteração nos **binlogs**. A réplica guarda “parei no arquivo X, posição Y” e pede ao master a continuação a partir dali. Se a réplica ficou parada ou atrasada (por exemplo, derrubada pelo OOM) e o cron apagou o binlog X no master, o master responde `1236: could not find first log file`."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "A réplica está lendo um livro que o master vai escrevendo, e guarda um marcador “parei no capítulo X, página Y”. Se o master joga fora o capítulo X antes de ela ler, o marcador aponta para papel que não existe mais. Não dá para pular o trecho: é preciso uma cópia nova do livro inteiro (dump ou snapshot) e recomeçar a leitura dali."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**Não tem conserto incremental:** o pedaço de história sumiu. É preciso reconstruir a réplica a partir de um dump ou snapshot novo.",
+                "**Prevenção:** nunca apagar um binlog que a réplica ainda não leu. Antes do purge, confira `SHOW REPLICA STATUS` (campo `Relay_Source_Log_File`) ou use uma expiração com folga.",
+                "**Alerta:** `Seconds_Behind_Source` e o estado das threads da réplica no Zabbix."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "teste",
+              "titulo": "Erro comum",
+              "texto": "É comum achar que a réplica simplesmente “perdeu o sync”, e responder isso com bastante confiança. Na verdade, isso é o sintoma, não o mecanismo: a réplica pediu um binlog que o master já tinha apagado."
+            }
+          ]
+        },
+        {
+          "id": "l-spof",
+          "titulo": "Ponto único de falha",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Recuperar depois da queda não é o mesmo que eliminar o risco: eliminar significa que a queda de uma peça não derruba o serviço."
+            },
+            {
+              "tipo": "p",
+              "texto": "Recuperar (restaurar backup da VM) e eliminar o risco são coisas diferentes. Eliminar o risco significa que a queda de uma peça não derruba o serviço."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Uma cidade ligada ao resto do mundo por uma única ponte. Ter uma equipe que reconstrói a ponte rápido é recuperação; ter uma segunda ponte é eliminar o ponto único de falha. E não vale deixar o caminhão de conserto estacionado do outro lado da única ponte (as ferramentas de infra na mesma máquina da borda)."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**proxy-01:** se cair, caem todos os sites atrás do Traefik, o Rundeck e o Grafana.",
+                "**Saída:** dois Traefik atrás do LB da OCI (que já existe por causa do WAF), com a configuração vinda do git. Com o IaC, subir a segunda instância é rodar a mesma pipeline.",
+                "Separar as ferramentas de infra (Rundeck, Grafana) da borda, para que um problema na entrada não leve junto as ferramentas de que você precisa para consertar."
+              ]
+            },
+            {
+              "tipo": "p",
+              "texto": "**Em incidente:** primeiro restaurar o serviço, depois investigar a causa."
+            }
+          ]
+        },
+        {
+          "id": "l-mudanca",
+          "titulo": "Mudança arriscada (ex.: middleware do Traefik que afeta tudo)",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Processo (comunicar, janela) é só metade; a outra metade é técnica: HML, rollback pronto antes, canário, checagem rápida e monitoramento logo depois."
+            },
+            {
+              "tipo": "p",
+              "texto": "Comunicar e usar janela de manutenção é a metade de processo. A metade técnica:"
+            },
+            {
+              "tipo": "lista",
+              "ordenada": true,
+              "itens": [
+                "Testar em HML.",
+                "Ter o rollback pronto **antes** de começar (cópia do arquivo ou `git revert`).",
+                "Aplicar primeiro em **um** router (canário). Depois, em todos.",
+                "Ter uma lista de `curl` que checa todos os sites em segundos.",
+                "Acompanhar logs e taxa de 5xx logo depois."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "O nome “canário” vem das minas de carvão: os mineiros levavam um canário, que sentia o gás antes das pessoas. Aplicar a mudança em um router só é deixar que um pedaço pequeno do tráfego avise do problema antes que ele atinja tudo."
+            },
+            {
+              "tipo": "p",
+              "texto": "Fora do horário comercial há menos gente afetada, mas também menos gente para perceber o problema. O monitoramento compensa isso."
+            }
+          ]
+        },
+        {
+          "id": "l-obs",
+          "titulo": "Métricas, logs e traces",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Métricas dizem quando e quanto, logs dizem o que aconteceu, traces dizem onde o tempo foi gasto; comece pelas métricas para achar a janela e o componente."
+            },
+            {
+              "tipo": "tabela",
+              "colunas": [
+                "Sinal",
+                "O que é",
+                "Responde"
+              ],
+              "linhas": [
+                [
+                  "Métricas",
+                  "Números em série temporal (CPU, latência p95, req/s). Baratas de guardar.",
+                  "Quando e quanto"
+                ],
+                [
+                  "Logs",
+                  "Eventos em texto, com detalhe.",
+                  "O que aconteceu"
+                ],
+                [
+                  "Traces",
+                  "O caminho de uma requisição entre serviços, com o tempo de cada etapa.",
+                  "Onde o tempo foi gasto"
+                ]
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Num carro: as **métricas** são o painel (velocidade, temperatura, ao longo do tempo); os **logs** são o diário de bordo (“às 14h02 acendeu a luz do óleo”); o **trace** é o rastreio de uma encomenda, mostrando por quais centros ela passou e quanto tempo ficou parada em cada um."
+            },
+            {
+              "tipo": "p",
+              "texto": "Para “a app ficou lenta às 14h”: comece pelas **métricas** para achar qual componente mudou às 14h, e depois vá nos **logs** daquela janela."
+            },
+            {
+              "tipo": "p",
+              "texto": "Os **quatro sinais de ouro** (Google SRE) para qualquer serviço: latência, tráfego, erros e saturação."
+            }
+          ]
+        },
+        {
+          "id": "l-vazou",
+          "titulo": "Segredo vazado no git",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Segredo que vazou já está comprometido: rotacione primeiro e investigue o uso; limpar o histórico é secundário."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": true,
+              "itens": [
+                "**Rotacionar** a credencial e atualizar onde ela é usada (cofre, redeploy).",
+                "**Supor que já foi usada:** olhar os logs de acesso do banco ou serviço desde o commit.",
+                "Limpar o histórico (git filter-repo) é secundário: clones, PRs e caches já têm a senha.",
+                "**Prevenir:** gitleaks como pre-commit ou como etapa da pipeline."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Perdeu a chave de casa? Você troca a fechadura, não sai procurando a chave. Apagar o commit é procurar a chave: as cópias que já foram feitas continuam abrindo a porta antiga."
+            }
+          ]
+        },
+        {
+          "id": "l-postmortem",
+          "titulo": "Postmortem curto",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Um postmortem sem culpados descreve o mecanismo que permitiu o incidente e termina com ações que têm dono e prazo."
+            },
+            {
+              "tipo": "p",
+              "texto": "Transforma um incidente em algo que não se repete. Sem culpados: o foco é o sistema que permitiu o erro."
+            },
+            {
+              "tipo": "codigo",
+              "texto": "Título e data\nImpacto:        o que caiu, para quem, por quanto tempo\nLinha do tempo: detecção → mitigação → resolução\nCausa:          o mecanismo, não a pessoa\nO que ajudou / o que atrapalhou\nAções:          cada uma com dono e prazo"
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "É como a investigação de um acidente aéreo: o objetivo não é punir o piloto, é descobrir qual combinação de sistema, procedimento e contexto permitiu o erro, para que nenhum outro voo caia pelo mesmo motivo."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "real",
+              "titulo": "Candidato",
+              "texto": "Um job de stop agendado no Rundeck (18h/20h) que desliga por engano os servidores `erp-01` e `erp-02` e derruba o ERP até o dia seguinte."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap-iac",
+      "numero": 5,
+      "titulo": "Infraestrutura como código",
+      "subtitulo": "",
+      "resumo": "Como descrever a infraestrutura em arquivos versionados e deixar a ferramenta aplicar só a diferença: idempotência, o state do Terraform, git como fonte da verdade e as regras de rede da OCI.",
+      "licoes": [
+        {
+          "id": "l-idem",
+          "titulo": "Idempotência",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Aplicar N vezes dá o mesmo resultado que aplicar uma, porque a ferramenta compara desejado × atual e só age na diferença."
+            },
+            {
+              "tipo": "p",
+              "texto": "Aplicar N vezes dá o mesmo estado final que aplicar uma vez. A ferramenta compara o estado desejado com o atual e **só age na diferença**. É isso que torna seguro rodar de novo a qualquer momento, e é o que permite detectar mudanças feitas à mão (o `terraform plan` mostra o que fugiu do código)."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Um botão “ligar” é idempotente: apertar uma ou dez vezes deixa a luz acesa. Um botão “alternar” não é: o resultado depende de quantas vezes você apertou. Módulos como `user` ou `acl` são botões “ligar” (descrevem o estado final); `shell` e `command` são “alternar” (executam uma ação, sem saber se ela já foi feita)."
+            },
+            {
+              "tipo": "p",
+              "texto": "Armadilha: no Ansible, os módulos `shell` e `command` **não** são idempotentes por padrão. Prefira o módulo específico (`user`, `acl`, `cron`, `iptables`) ou use `creates:` e `changed_when:`."
+            }
+          ]
+        },
+        {
+          "id": "l-state",
+          "titulo": "Terraform state",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "O state é o mapa que liga cada recurso do código ao recurso real; contém segredos e precisa de trava, por isso vive num backend remoto e restrito."
+            },
+            {
+              "tipo": "p",
+              "texto": "O state liga cada recurso do `.tf` ao recurso real (IDs e atributos). É com ele que o Terraform sabe o que já existe."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "O state é o caderno do mestre de obras que diz “a parede do desenho, folha 3, é esta parede aqui, número de série tal”. Sem o caderno, ele olharia o desenho e tentaria construir tudo de novo. E se dois mestres de obras trabalham com cópias diferentes do caderno ao mesmo tempo, um derruba o que o outro fez; a trava é a regra de que só um pega o caderno por vez."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**Contém segredos em texto puro.** Expor o state é como expor um `.env`.",
+                "**No git não tem trava:** duas pessoas rodando `apply` com o state desatualizado podem destruir recursos.",
+                "**Solução:** backend remoto no Object Storage da OCI, com acesso restrito. Confira se o backend escolhido tem **trava (locking)**: o caminho antigo, pelo backend compatível com S3, não trava sozinho. Veja na documentação da versão do Terraform que vocês usarem."
+              ]
+            },
+            {
+              "tipo": "p",
+              "texto": "Para não escrever tudo do zero: o **Resource Discovery** do OCI Resource Manager gera o Terraform a partir do que já existe num compartment."
+            }
+          ]
+        },
+        {
+          "id": "l-gitops",
+          "titulo": "Git como fonte da verdade",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "A mudança acontece no repositório e a pipeline aplica; assim, revisão, rollback e histórico vêm de graça do git."
+            },
+            {
+              "tipo": "p",
+              "texto": "Ninguém edita direto no servidor: muda no repositório, abre PR, alguém revisa, a pipeline aplica. Rollback é `git revert`, e o histórico responde “quem mudou isso e quando”."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "É o livro de ocorrências da portaria: nada acontece no prédio sem antes ser escrito no livro, assinado e conferido. Se algo der errado, o livro diz quem fez, quando, e como era antes."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": true,
+              "itens": [
+                "**Git:** Traefik do `proxy-01` (um arquivo curto por app, a pipeline gera o resto), depois composes, crons e scripts do cofre.",
+                "**Ansible:** usuários, ACL, iptables/pg_hba, mounts SMB, crons de limpeza. Pode rodar pelo Rundeck.",
+                "**Terraform:** OCI (WAF, LB, VCN, compartments, OCIR)."
+              ]
+            },
+            {
+              "tipo": "p",
+              "texto": "**Com o colega de equipe:** a interface dele é o PR, não a ferramenta. Uma ferramenta nova por vez, ele revisa os seus PRs, cada repo tem um README de receitas, e a saída de emergência fica documentada (edita no servidor, commita depois)."
+            }
+          ]
+        },
+        {
+          "id": "l-nsg",
+          "titulo": "OCI: Security List × NSG",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "A Security List vale para a subnet inteira; a NSG vale só para as VNICs associadas e pode usar outra NSG como origem."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**Security List:** vale para todas as VNICs da subnet.",
+                "**NSG:** vale só para as VNICs associadas, e pode usar outra NSG como origem (“app-nsg pode falar com db-nsg”), o que dispensa listas de IPs.",
+                "**Stateful:** o tráfego de resposta é liberado automaticamente, então você só escreve a regra de ida. Stateless exige as duas regras."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "A Security List é a regra do andar inteiro (“neste andar, todo mundo pode receber visitas da recepção”). A NSG é um crachá de grupo: “quem tem crachá de app pode entrar nas salas de quem tem crachá de banco”, não importa em que andar estejam. Stateful é o porteiro que lembra quem saiu e deixa voltar sem perguntar; stateless é o porteiro sem memória, que exige autorização nos dois sentidos."
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "teste",
+              "titulo": "Erro comum",
+              "texto": "É comum achar que Security List e NSG são só dois nomes para a mesma coisa, e duvidar da diferença mesmo quando se acerta. Na verdade, a diferença é o alcance: a Security List vale para a subnet inteira, a NSG só para as VNICs associadas."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap-k8s",
+      "numero": 6,
+      "titulo": "Kubernetes: quando sim, quando não",
+      "subtitulo": "opcional",
+      "resumo": "Quando um orquestrador compensa o custo de operá-lo, e por que, para uma equipe pequena, compose + git + Ansible resolve até lá.",
+      "licoes": [
+        {
+          "id": "l-k8s",
+          "titulo": "Kubernetes: quando sim, quando não",
+          "blocos": [
+            {
+              "tipo": "aviso",
+              "estilo": "resumo",
+              "titulo": "Em uma frase",
+              "texto": "Kubernetes resolve problemas de escala que a equipe ainda não tem e cobra um custo de operação que ela não consegue pagar; o IaC feito hoje continua valendo se a migração vier."
+            },
+            {
+              "tipo": "p",
+              "texto": "Achar que é “bazuca para matar rato”, pelo tamanho da equipe, é a avaliação madura. Kubernetes operado por uma pessoa e meia é risco, não ganho."
+            },
+            {
+              "tipo": "lista",
+              "ordenada": false,
+              "itens": [
+                "**Passa a fazer sentido quando:** distribuir containers à mão entre hosts virar dor real, houver necessidade de autoscaling, ou a equipe chegar a 3 pessoas ou mais.",
+                "**Se chegar lá:** OKE (gerenciado pela OCI), para não carregar o control plane.",
+                "**Até lá:** compose + git + Ansible resolve, e tudo que for feito no IaC continua valendo na migração."
+              ]
+            },
+            {
+              "tipo": "aviso",
+              "estilo": "dica",
+              "titulo": "Analogia",
+              "texto": "Kubernetes é um caminhão de mudança com motorista dedicado: ótimo para mudar uma empresa inteira, caro e trabalhoso para levar algumas caixas por semana. O OKE é alugar o caminhão já com a manutenção do motor (o control plane) inclusa."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

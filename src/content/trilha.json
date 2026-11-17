@@ -1,0 +1,87 @@
+{
+  "diagnostico": "Para quem aprendeu infraestrutura fazendo: já resolve bem o “o que fazer” no dia a dia e quer entender o “por que acontece”. A trilha cobre as camadas de baixo (TCP, HTTP, sistema de arquivos, interno do git e dos containers) e os conceitos de confiabilidade (RPO/RTO, ponto único de falha, menor privilégio) até chegar em infraestrutura como código.",
+  "extras": [
+    {
+      "titulo": "O hábito que vale mais que a trilha",
+      "texto": "Quando uma IA ou um colega resolver algo, pergunte **por que isso funcionou?** ou **por que quebrou?**. E digite você mesmo os comandos mais importantes."
+    },
+    {
+      "titulo": "Certificações (opcional)",
+      "texto": "OCI Architect Associate → Terraform Associate → LFCS ou CKA. Servem para marcar o caminho, não substituem os labs."
+    }
+  ],
+  "fases": [
+    {
+      "id": "f1", "titulo": "Redes", "semanas": "Semanas 1–4", "capitulo": "cap-redes",
+      "resumo": "TCP e handshake, ICMP, DNS, HTTP e TLS/SNI. É a base que mais destrava diagnóstico.",
+      "itens": [
+        {"id": "f1-zines", "tipo": "estudo", "texto": "Zines da Julia Evans: Networking! ACK!, HTTP e How DNS Works", "link": "https://wizardzines.com/"},
+        {"id": "f1-kurose", "tipo": "estudo", "texto": "Kurose, Redes de Computadores: capítulos 1 a 3"},
+        {"id": "f1-http", "tipo": "estudo", "texto": "Saber de cor a tabela de códigos HTTP da apostila"},
+        {"id": "f1-tcpdump", "tipo": "lab", "texto": "tcpdump na porta 5432 vendo SYN/SYN-ACK, RST e ICMP", "sub": "Provoque os três erros de propósito: serviço parado, REJECT e DROP"},
+        {"id": "f1-tls", "tipo": "lab", "texto": "curl -v e openssl s_client -servername nos três sites do WAF", "sub": "Confirmar qual certificado cada nome recebe e a validade"},
+        {"id": "f1-dns", "tipo": "real", "texto": "Comparar com dig a resposta interna × externa de um domínio seu"},
+        {"id": "f1-explica", "tipo": "real", "texto": "Explicar refused / no route / timeout e 502 / 504 para um colega sem consultar"}
+      ]
+    },
+    {
+      "id": "f2", "titulo": "Linux por dentro", "semanas": "Semanas 5–7", "capitulo": "cap-linux",
+      "resumo": "Inodes, file descriptors, permissões e ACL, systemd e journald.",
+      "itens": [
+        {"id": "f2-ward", "tipo": "estudo", "texto": "Brian Ward, How Linux Works: sistema de arquivos, processos e systemd"},
+        {"id": "f2-dfdu", "tipo": "lab", "texto": "Reproduzir df ≠ du e achar o culpado com lsof +L1"},
+        {"id": "f2-inodes", "tipo": "lab", "texto": "Esgotar os inodes de um disco pequeno e diagnosticar com df -i"},
+        {"id": "f2-acl", "tipo": "lab", "texto": "Quebrar a máscara de ACL com chmod e consertar com setfacl"},
+        {"id": "f2-unit", "tipo": "lab", "texto": "Escrever uma unit systemd com Restart=on-failure e ler o journalctl"},
+        {"id": "f2-tmp", "tipo": "real", "texto": "Criar o cron de limpeza do /tmp de um servidor que enche o disco"}
+      ]
+    },
+    {
+      "id": "f3", "titulo": "Git e containers por dentro", "semanas": "Semanas 8–9", "capitulo": "cap-git",
+      "resumo": "Merge, rebase e reflog. Camadas de imagem, namespaces, redes Docker e por que docker equivale a root.",
+      "itens": [
+        {"id": "f3-progit", "tipo": "estudo", "texto": "Pro Git, capítulos 3 (branches) e 7 (ferramentas)", "link": "https://git-scm.com/book/pt-br/v2"},
+        {"id": "f3-lgb", "tipo": "estudo", "texto": "Learn Git Branching: níveis principais", "link": "https://learngitbranching.js.org/?locale=pt_BR"},
+        {"id": "f3-history", "tipo": "lab", "texto": "docker history --no-trunc numa imagem sua do OCIR"},
+        {"id": "f3-root", "tipo": "lab", "texto": "Provar numa VM que o grupo docker dá root no host"},
+        {"id": "f3-grupo-docker", "tipo": "real", "texto": "Rever quem está no grupo docker nos servidores (e tirar quem não precisa)"},
+        {"id": "f3-rundeck", "tipo": "real", "texto": "Job no Rundeck para um colega reiniciar container de prd sem shell"}
+      ]
+    },
+    {
+      "id": "f4", "titulo": "Confiabilidade", "semanas": "Semanas 10–12", "capitulo": "cap-sre",
+      "resumo": "RPO e RTO, teste de restore, ponto único de falha, sinais de ouro e postmortem.",
+      "itens": [
+        {"id": "f4-sre", "tipo": "estudo", "texto": "Google SRE Book: Monitoring Distributed Systems, Postmortem Culture e Release Engineering", "link": "https://sre.google/sre-book/table-of-contents/"},
+        {"id": "f4-use", "tipo": "estudo", "texto": "Método USE, de Brendan Gregg", "link": "https://www.brendangregg.com/usemethod.html"},
+        {"id": "f4-rpo", "tipo": "real", "texto": "Definir RPO e RTO do banco principal com o negócio"},
+        {"id": "f4-restore", "tipo": "real", "texto": "Restore cronometrado do banco principal numa VM descartável"},
+        {"id": "f4-repl", "tipo": "real", "texto": "Corrigir o cron de purge de binlog para respeitar a réplica e alertar o atraso no Zabbix"},
+        {"id": "f4-pm", "tipo": "real", "texto": "Postmortem de um incidente recente (ex.: um job agendado que derrubou servidores)"},
+        {"id": "f4-spof", "tipo": "real", "texto": "Mapa dos pontos únicos de falha (começando pelo proxy de borda)"}
+      ]
+    },
+    {
+      "id": "f5", "titulo": "Infraestrutura como código", "semanas": "Semanas 13–18", "capitulo": "cap-iac",
+      "resumo": "Uma ordem que funciona: Traefik no git, depois Ansible, depois Terraform na OCI, junto com a equipe.",
+      "itens": [
+        {"id": "f5-geerling", "tipo": "estudo", "texto": "Jeff Geerling, Ansible for DevOps: capítulos iniciais"},
+        {"id": "f5-brikman", "tipo": "estudo", "texto": "Yevgeniy Brikman, Terraform: Up & Running: capítulos 1 a 3"},
+        {"id": "f5-repo", "tipo": "real", "texto": "Repo infra-traefik com os .yml atuais do proxy de borda"},
+        {"id": "f5-pipe", "tipo": "real", "texto": "Template por app e pipeline com validação e rsync"},
+        {"id": "f5-ansible", "tipo": "real", "texto": "Primeiro playbook Ansible: usuários e ACLs"},
+        {"id": "f5-tf", "tipo": "real", "texto": "Resource Discovery de um compartment e state no Object Storage"},
+        {"id": "f5-colega-pr", "tipo": "real", "texto": "O colega expõe uma app sozinho, só via PR"}
+      ]
+    },
+    {
+      "id": "f6", "titulo": "Kubernetes", "semanas": "Depois · opcional", "capitulo": "cap-k8s",
+      "resumo": "Só como laboratório por enquanto. A decisão de adotar continua sendo “ainda não”.",
+      "itens": [
+        {"id": "f6-k3s", "tipo": "lab", "texto": "Subir um cluster k3s numa VM e publicar uma app"},
+        {"id": "f6-hard", "tipo": "estudo", "texto": "Kubernetes the Hard Way", "link": "https://github.com/kelseyhightower/kubernetes-the-hard-way"},
+        {"id": "f6-rever", "tipo": "real", "texto": "Rever a decisão com os critérios da apostila"}
+      ]
+    }
+  ]
+}

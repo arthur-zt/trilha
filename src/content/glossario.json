@@ -1,0 +1,604 @@
+{
+  "termos": [
+    {
+      "termo": "401 × 403",
+      "nome": "Unauthorized × Forbidden",
+      "categoria": "Redes",
+      "definicao": "**401 Unauthorized**: o pedido chegou sem autenticação válida (sem token, token vencido, senha errada). **403 Forbidden**: a autenticação não é o problema; o servidor recusa o acesso àquele recurso.",
+      "exemplo": "O `ipAllowList` do Traefik devolve 403 para quem está fora da rede interna; um PAT expirado no Azure DevOps devolve 401.",
+      "licao": "l-http"
+    },
+    {
+      "termo": "404",
+      "nome": "Not Found",
+      "categoria": "Redes",
+      "definicao": "O recurso pedido não existe. Atrás do Traefik, também é o que volta quando **nenhum router** casou com o host ou o caminho, antes de o pedido chegar a qualquer app.",
+      "exemplo": "404 logo depois de publicar um site novo no file provider: confira a regra `Host(...)` do router antes de culpar a app.",
+      "licao": "l-http"
+    },
+    {
+      "termo": "502 × 504",
+      "nome": "Bad Gateway × Gateway Timeout",
+      "categoria": "Redes",
+      "definicao": "Os dois são o proxy falando do backend. **502**: o proxy tentou o backend e recebeu erro ou recusa (o *connection refused* do HTTP). **504**: o proxy esperou e o backend não respondeu a tempo (o *timeout* do HTTP).",
+      "exemplo": "Container parado ou porta errada no serviço do Traefik tende a dar 502; app travada, banco lento ou DROP no caminho tendem a dar 504.",
+      "licao": "l-http"
+    },
+    {
+      "termo": "503",
+      "nome": "Service Unavailable",
+      "categoria": "Redes",
+      "definicao": "O servidor ou o proxy está de pé, mas não tem como atender agora: nenhum backend saudável, sobrecarga ou modo de manutenção.",
+      "exemplo": "No Traefik, um serviço cujos servidores falharam todos no health check responde 503.",
+      "licao": "l-http"
+    },
+    {
+      "termo": "ACL",
+      "nome": "Access Control List (POSIX)",
+      "categoria": "Linux",
+      "definicao": "Permissões extras para usuários e grupos específicos, além do trio dono/grupo/outros. Vê-se com `getfacl` e altera-se com `setfacl`; o `+` no fim das permissões do `ls -l` indica que há ACL.",
+      "exemplo": "`setfacl -m u:dev1:rwx /opt/app-loja` dá escrita a um dev sem mexer no dono nem no grupo do diretório.",
+      "licao": "l-acl"
+    },
+    {
+      "termo": "ACL padrão",
+      "nome": "default ACL",
+      "categoria": "Linux",
+      "definicao": "ACL definida num diretório com `setfacl -d` que é herdada pelos arquivos e subdiretórios criados dentro dele. Não altera o que já existe; para isso, aplique também a ACL normal (com `-R` se preciso).",
+      "exemplo": "`setfacl -d -m u:dev1:rwx /caminho` faz os arquivos novos do deploy já nascerem com a entrada dele.",
+      "licao": "l-acl"
+    },
+    {
+      "termo": "Ansible playbook",
+      "nome": "",
+      "categoria": "IaC",
+      "definicao": "Arquivo YAML com uma lista de *plays*: em quais hosts rodar e quais tarefas aplicar, cada uma usando um módulo (`user`, `acl`, `cron`...). Roda por SSH, sem agente instalado nos servidores.",
+      "exemplo": "Um playbook de ACL e pg_hba pode rodar pelo Rundeck e refazer as permissões que a pipeline derruba.",
+      "licao": "l-gitops"
+    },
+    {
+      "termo": "Backend remoto",
+      "nome": "",
+      "categoria": "IaC",
+      "definicao": "Lugar fora da máquina local onde o Terraform guarda o state, compartilhado pela equipe. Um bom backend oferece **locking** (trava que impede dois `apply` simultâneos), criptografia e acesso restrito.",
+      "exemplo": "Object Storage da OCI como backend, no lugar de um `terraform.tfstate` commitado no git.",
+      "licao": "l-state"
+    },
+    {
+      "termo": "Binlog",
+      "nome": "binary log",
+      "categoria": "Confiabilidade",
+      "definicao": "Log binário, em arquivos sequenciais, onde o MySQL master grava cada alteração. Serve à replicação (a réplica lê dali) e à recuperação até um ponto no tempo depois de restaurar um backup.",
+      "exemplo": "Guardar os binlogs fora do servidor é o que leva o RPO do banco principal de até 24 h para minutos.",
+      "licao": "l-repl"
+    },
+    {
+      "termo": "Bridge",
+      "nome": "ponte de rede",
+      "categoria": "Git e containers",
+      "definicao": "Switch virtual do Linux. A rede padrão do Docker e as redes que o Compose cria são bridges: os containers ligados a ela se falam por IP, e o tráfego para fora sai pelo host com NAT.",
+      "exemplo": "Nas redes criadas pelo Compose, o DNS interno do Docker (`127.0.0.11`) resolve o nome de cada serviço para o IP do container.",
+      "licao": "l-dockernet"
+    },
+    {
+      "termo": "Camada de imagem",
+      "nome": "layer",
+      "categoria": "Git e containers",
+      "definicao": "Cada instrução do Dockerfile que altera arquivos gera uma camada somente leitura, empilhada sobre as anteriores. Apagar um arquivo numa camada posterior não o remove das anteriores, e ENV/ARG ficam nos metadados.",
+      "exemplo": "`docker history --no-trunc imagem:tag` revela um segredo passado por ARG para qualquer um com pull no OCIR.",
+      "licao": "l-camadas"
+    },
+    {
+      "termo": "Canário",
+      "nome": "canary",
+      "categoria": "Confiabilidade",
+      "definicao": "Aplicar a mudança primeiro numa parte pequena (um router, um servidor, uma fração do tráfego), observar e só então estender ao resto. Limita o estrago se der errado.",
+      "exemplo": "Middleware novo no Traefik: ligue em um router, confira logs e taxa de 5xx, depois aplique em todos.",
+      "licao": "l-mudanca"
+    },
+    {
+      "termo": "Certificado",
+      "nome": "certificado X.509",
+      "categoria": "Redes",
+      "definicao": "Documento assinado por uma autoridade certificadora (CA) que liga um ou mais nomes a uma chave pública, com prazo de validade. O cliente confere a assinatura, o nome e a data antes de confiar no servidor.",
+      "exemplo": "`openssl s_client -connect host:443 -servername site | openssl x509 -noout -subject -dates` mostra qual certificado foi entregue e até quando vale.",
+      "licao": "l-tls"
+    },
+    {
+      "termo": "Compartment",
+      "nome": "",
+      "categoria": "Cloud e segurança",
+      "definicao": "Divisão lógica dos recursos de uma tenancy da OCI, usada para organizar e para aplicar políticas de IAM e cotas. Pode ser aninhado e não tem efeito nenhum sobre o tráfego de rede.",
+      "exemplo": "Mover o WAF para o compartment `REDE` muda quem tem permissão sobre ele, não o caminho dos pacotes.",
+      "licao": "l-nsg"
+    },
+    {
+      "termo": "Condição de corrida",
+      "nome": "race condition",
+      "categoria": "Git e containers",
+      "definicao": "Erro que depende da ordem em que processos concorrentes executam: os dois leem o mesmo estado, decidem com base nele e um sobrescreve o outro. Resolve-se com uma operação atômica ou uma trava.",
+      "exemplo": "Duas runs de prd leram \"última = 1.17\", calcularam 1.18.0 e as duas deram push; reservar a tag no git antes do push resolve.",
+      "licao": "l-digest"
+    },
+    {
+      "termo": "Control plane",
+      "nome": "plano de controle",
+      "categoria": "Kubernetes",
+      "definicao": "Componentes que guardam o estado do cluster e tomam as decisões: API server, etcd, scheduler e controller manager. Se ele cai, os pods que já rodam continuam, mas o cluster deixa de aceitar mudanças e de se recuperar sozinho.",
+      "exemplo": "No OKE, a OCI opera o control plane; você cuida dos nós e das cargas.",
+      "licao": "l-k8s"
+    },
+    {
+      "termo": "Digest",
+      "nome": "",
+      "categoria": "Git e containers",
+      "definicao": "Hash `sha256:` do manifesto da imagem. Muda se qualquer byte mudar e nunca passa a apontar para outro conteúdo: é o identificador imutável de verdade.",
+      "exemplo": "`image: regiao.ocir.io/ns/app@sha256:...` no compose garante que prd roda exatamente a imagem testada.",
+      "licao": "l-digest"
+    },
+    {
+      "termo": "DNS",
+      "nome": "Domain Name System",
+      "categoria": "Redes",
+      "definicao": "Sistema que traduz nomes em registros (A, CNAME, MX...). A máquina pergunta a um **resolver** recursivo, que consulta da raiz até o servidor autoritativo da zona e guarda a resposta em cache pelo TTL.",
+      "exemplo": "Compare `dig +short site @8.8.8.8` com a resposta do DC interno: na maioria dos incidentes o DNS responde, mas com o IP errado para quem pergunta.",
+      "licao": "l-dns"
+    },
+    {
+      "termo": "Drift",
+      "nome": "deriva de configuração",
+      "categoria": "IaC",
+      "definicao": "Diferença entre o estado desejado (o que o código declara) e o estado real, em geral por mudança feita à mão. Ferramentas idempotentes a detectam: o `terraform plan` mostra o que fugiu do código.",
+      "exemplo": "Alguém abriu uma porta na Security List pelo console: o próximo plan propõe removê-la.",
+      "licao": "l-idem"
+    },
+    {
+      "termo": "File descriptor",
+      "nome": "descritor de arquivo",
+      "categoria": "Linux",
+      "definicao": "Número que o kernel entrega a um processo para cada arquivo, socket ou pipe que ele abre, visível em `/proc/PID/fd/`. Enquanto houver um descritor aberto, o arquivo continua ocupando espaço, mesmo que o nome tenha sido apagado.",
+      "exemplo": "Log apagado com a app ainda escrevendo: o espaço só volta quando o descritor fecha (reiniciar o processo) ou com `truncate -s 0 /proc/PID/fd/N`.",
+      "licao": "l-dfdu"
+    },
+    {
+      "termo": "Force push",
+      "nome": "git push --force",
+      "categoria": "Git e containers",
+      "definicao": "Substitui o histórico da branch remota pelo seu, descartando commits que só existiam lá. `--force-with-lease` só sobrescreve se o remoto ainda estiver onde você viu por último.",
+      "exemplo": "Depois de um rebase numa branch compartilhada, o force push apaga o que outra pessoa enviou nesse meio-tempo.",
+      "licao": "l-rebase"
+    },
+    {
+      "termo": "gitleaks",
+      "nome": "",
+      "categoria": "Cloud e segurança",
+      "definicao": "Ferramenta que procura segredos (chaves, tokens, senhas) nos commits e no histórico do git, por padrões e entropia. Roda como hook de pre-commit ou como etapa da pipeline.",
+      "exemplo": "Uma etapa de gitleaks na pipeline do Azure DevOps barra o PR antes de a senha chegar à main.",
+      "licao": "l-vazou"
+    },
+    {
+      "termo": "GitOps",
+      "nome": "git como fonte da verdade",
+      "categoria": "IaC",
+      "definicao": "Prática em que o repositório git é a **fonte da verdade** da infra: toda mudança entra por PR revisado e uma pipeline (ou um agente que reconcilia continuamente) aplica. Rollback é `git revert`, e o histórico diz quem mudou o quê e quando.",
+      "exemplo": "Configuração do Traefik do `proxy-01` no repositório, aplicada pela pipeline, em vez de editada no servidor.",
+      "licao": "l-gitops"
+    },
+    {
+      "termo": "Grupo docker",
+      "nome": "",
+      "categoria": "Git e containers",
+      "definicao": "Grupo com acesso ao socket do daemon Docker, que roda como root. Quem fala com o daemon pode montar o `/` do host num container e virar root, então pertencer ao grupo equivale a ser root.",
+      "exemplo": "Um dev no grupo docker do `app-01` torna irrelevante a ACL que limita o acesso dele em `/opt/app-*`.",
+      "licao": "l-dockerroot"
+    },
+    {
+      "termo": "Handshake TCP",
+      "nome": "aperto de mão em três vias",
+      "categoria": "Redes",
+      "definicao": "Abertura de toda conexão TCP em três pacotes: o cliente manda **SYN**, o servidor responde **SYN-ACK** e o cliente confirma com **ACK**. Só depois trafegam dados; cada erro de conexão é uma forma diferente desse diálogo falhar.",
+      "exemplo": "`sudo tcpdump -ni any port 5432` mostra o SYN saindo e o que volta: SYN-ACK, RST, ICMP ou nada.",
+      "licao": "l-tcp"
+    },
+    {
+      "termo": "ICMP",
+      "nome": "Internet Control Message Protocol",
+      "categoria": "Redes",
+      "definicao": "Protocolo de mensagens de controle da camada de rede (o `ping` usa). Entre outras coisas, avisa que um destino é inalcançável (*destination unreachable*), e é uma dessas mensagens que vira o erro *No route to host*.",
+      "exemplo": "O REJECT do iptables no `db-01` responde com ICMP, por isso o `app-01` recebe *No route to host* na hora, e não timeout.",
+      "licao": "l-tcp"
+    },
+    {
+      "termo": "Idempotência",
+      "nome": "",
+      "categoria": "IaC",
+      "definicao": "Aplicar N vezes dá o mesmo estado final que aplicar uma vez. A ferramenta compara o estado desejado com o atual e só age na diferença, por isso é seguro rodar de novo a qualquer momento.",
+      "exemplo": "O módulo `user` do Ansible cria o usuário se ele faltar e não faz nada se já existir.",
+      "licao": "l-idem"
+    },
+    {
+      "termo": "Inode",
+      "nome": "",
+      "categoria": "Linux",
+      "definicao": "Estrutura do sistema de arquivos que guarda os metadados de um arquivo (dono, permissões, datas, onde estão os blocos), mas não o nome. Cada arquivo gasta um, independentemente do tamanho; no ext4 o total é fixado na formatação.",
+      "exemplo": "`df -i` em 100% com `df -h` folgado explica *No space left on device* com disco livre: milhões de arquivos pequenos.",
+      "licao": "l-inodes"
+    },
+    {
+      "termo": "Janela de manutenção",
+      "nome": "",
+      "categoria": "Confiabilidade",
+      "definicao": "Horário combinado e comunicado para mudanças com risco de indisponibilidade. Reduz o impacto, não o risco: menos gente afetada também é menos gente para perceber o problema.",
+      "exemplo": "Mudança às 20h exige monitoramento e rollback pronto, porque ninguém vai reclamar no chat.",
+      "licao": "l-mudanca"
+    },
+    {
+      "termo": "journald",
+      "nome": "systemd-journald",
+      "categoria": "Linux",
+      "definicao": "Serviço do systemd que coleta os logs das units (stdout/stderr e syslog) e do kernel num formato indexado. Consulta-se com `journalctl`.",
+      "exemplo": "`journalctl -u svc --since \"10 min ago\"` mostra só o log daquela unit na janela do problema.",
+      "licao": "l-systemd"
+    },
+    {
+      "termo": "k3s",
+      "nome": "",
+      "categoria": "Kubernetes",
+      "definicao": "Distribuição leve e certificada do Kubernetes, num binário único, que num servidor só usa SQLite no lugar do etcd. Boa para laboratório e edge, mas continua sendo Kubernetes para operar.",
+      "exemplo": "Bom para aprender Kubernetes numa VM descartável, sem tocar em produção.",
+      "licao": "l-k8s"
+    },
+    {
+      "termo": "Listener",
+      "nome": "",
+      "categoria": "Cloud e segurança",
+      "definicao": "Configuração do load balancer que escuta numa porta e protocolo (por exemplo, HTTPS na 443) e define o que fazer com o tráfego: certificados, regras de roteamento e conjunto de backends.",
+      "exemplo": "Um listener 443 com vários certificados atende vários domínios no mesmo IP, escolhendo pelo SNI.",
+      "licao": "l-tls"
+    },
+    {
+      "termo": "Load balancer",
+      "nome": "balanceador de carga",
+      "categoria": "Cloud e segurança",
+      "definicao": "Distribui as conexões entre vários backends e tira de rotação os que falham no health check. É o que permite ter redundância sem o cliente perceber.",
+      "exemplo": "Dois Traefik atrás do LB da OCI eliminam o `proxy-01` como ponto único de falha.",
+      "licao": "l-spof"
+    },
+    {
+      "termo": "Logs",
+      "nome": "",
+      "categoria": "Confiabilidade",
+      "definicao": "Eventos em texto com o detalhe do que aconteceu (requisição, erro, stack trace). Respondem *o que aconteceu*, mas são caros de guardar e de buscar em volume.",
+      "exemplo": "Depois de achar a janela pela métrica, o access log do Traefik e o log do container dizem o que falhou.",
+      "licao": "l-obs"
+    },
+    {
+      "termo": "lsof",
+      "nome": "list open files",
+      "categoria": "Linux",
+      "definicao": "Ferramenta que lista os arquivos abertos pelos processos (arquivos, sockets, pipes). `lsof +L1` mostra os arquivos com zero links, ou seja, apagados mas ainda abertos.",
+      "exemplo": "Primeiro comando quando o `df` mostra disco cheio e o `du` soma bem menos.",
+      "licao": "l-dfdu"
+    },
+    {
+      "termo": "Máscara de ACL",
+      "nome": "mask",
+      "categoria": "Linux",
+      "definicao": "Entrada `mask::` que funciona como teto para os usuários e grupos nomeados e para o grupo dono. Quando há ACL, os bits de grupo que o `ls -l` mostra e que o `chmod` altera passam a ser a máscara.",
+      "exemplo": "Um `chmod 750` da pipeline baixa a máscara para `r-x` e o `dev1` perde a escrita (`#effective:r-x`), mesmo com a ACL intacta.",
+      "licao": "l-acl"
+    },
+    {
+      "termo": "Menor privilégio",
+      "nome": "least privilege",
+      "categoria": "Cloud e segurança",
+      "definicao": "Dar a cada pessoa ou sistema só o acesso necessário para a tarefa, e nada além. Reduz o estrago de um erro ou de uma credencial vazada.",
+      "exemplo": "Um job no Rundeck para reiniciar o container cumpre o mesmo objetivo que o grupo docker, sem entregar root.",
+      "licao": "l-dockerroot"
+    },
+    {
+      "termo": "Merge",
+      "nome": "",
+      "categoria": "Git e containers",
+      "definicao": "Une duas histórias criando um commit de merge com dois pais. Nada é reescrito, então é seguro em branches compartilhadas. Conflitos acontecem igual ao rebase, só que resolvidos de uma vez.",
+      "exemplo": "Completar um PR no Azure DevOps com merge preserva os commits originais da branch.",
+      "licao": "l-rebase"
+    },
+    {
+      "termo": "Método USE",
+      "nome": "Utilization, Saturation, Errors",
+      "categoria": "Confiabilidade",
+      "definicao": "Checklist de Brendan Gregg para recursos (CPU, memória, disco, rede): para cada um, olhe **utilização**, **saturação** (fila, espera) e **erros**. Complementa os sinais de ouro, que olham o serviço de fora.",
+      "exemplo": "Servidor lento: CPU a 70% com fila de execução longa (saturação) diz mais que o percentual de uso sozinho.",
+      "licao": "l-obs"
+    },
+    {
+      "termo": "Métricas",
+      "nome": "",
+      "categoria": "Confiabilidade",
+      "definicao": "Números medidos continuamente e guardados em série temporal (CPU, req/s, latência p95, taxa de 5xx). Baratas de guardar por muito tempo; respondem *quando* e *quanto* e são a base dos alertas.",
+      "exemplo": "Zabbix e Grafana trabalham com métricas: é por elas que se acha qual componente mudou às 14h.",
+      "licao": "l-obs"
+    },
+    {
+      "termo": "Módulo shell",
+      "nome": "módulos `shell` e `command` do Ansible",
+      "categoria": "IaC",
+      "definicao": "Executam um comando arbitrário. Como o Ansible não sabe o efeito, eles rodam sempre e relatam *changed*: não são idempotentes por padrão.",
+      "exemplo": "Prefira o módulo específico (`acl`, `cron`, `iptables`) ou use `creates:` e `changed_when:`.",
+      "licao": "l-idem"
+    },
+    {
+      "termo": "Network namespace",
+      "nome": "",
+      "categoria": "Git e containers",
+      "definicao": "Isolamento do kernel que dá a um processo a própria pilha de rede: interfaces, IPs, rotas, regras de firewall e o próprio `localhost`. Cada container tem o seu.",
+      "exemplo": "`localhost:5432` dentro do container é o próprio container; para chegar ao host, use `host.docker.internal` com `host-gateway`.",
+      "licao": "l-dockernet"
+    },
+    {
+      "termo": "NSG",
+      "nome": "Network Security Group",
+      "categoria": "Cloud e segurança",
+      "definicao": "Conjunto de regras de firewall da OCI aplicado só às VNICs associadas a ele, não à subnet inteira. Uma regra pode usar outra NSG como origem ou destino, o que dispensa listas de IP.",
+      "exemplo": "\"`app-nsg` pode falar com `db-nsg` na 5432\" continua valendo quando as VMs da app são recriadas com outro IP.",
+      "licao": "l-nsg"
+    },
+    {
+      "termo": "OKE",
+      "nome": "Oracle Kubernetes Engine (Container Engine for Kubernetes)",
+      "categoria": "Kubernetes",
+      "definicao": "Kubernetes gerenciado da OCI: a Oracle opera o control plane e você cuida dos nós de trabalho e das aplicações.",
+      "exemplo": "Se um dia o Kubernetes fizer sentido, é o caminho para não carregar o control plane com uma equipe pequena.",
+      "licao": "l-k8s"
+    },
+    {
+      "termo": "OOM killer",
+      "nome": "Out Of Memory killer",
+      "categoria": "Linux",
+      "definicao": "Mecanismo do kernel que, quando a memória acaba, escolhe um processo e o mata com **SIGKILL** (sinal 9, que não pode ser capturado nem tratado). O processo sai com código 137 (128 + 9); 143 seria SIGTERM (128 + 15).",
+      "exemplo": "`journalctl -k | grep -i oom` ou o campo `OOMKilled` do `docker inspect` confirmam se um 137 foi falta de memória.",
+      "licao": "l-systemd"
+    },
+    {
+      "termo": "Ponto de montagem",
+      "nome": "mount point",
+      "categoria": "Linux",
+      "definicao": "Diretório onde um sistema de arquivos é acoplado à árvore. Montar algo por cima de um diretório esconde o que já estava gravado nele, que continua ocupando espaço no disco de baixo.",
+      "exemplo": "Arquivos gravados num diretório antes de o disco ou o SMB montar ficam invisíveis ao `du`, mas contam no `df` do disco de baixo.",
+      "licao": "l-dfdu"
+    },
+    {
+      "termo": "Ponto único de falha",
+      "nome": "SPOF, single point of failure",
+      "categoria": "Confiabilidade",
+      "definicao": "Componente cuja queda derruba o serviço inteiro. Backup e restauração encurtam a volta, mas não eliminam o SPOF; eliminar exige redundância.",
+      "exemplo": "O `proxy-01` é SPOF: se cair, caem os sites atrás do Traefik, o Rundeck e o Grafana.",
+      "licao": "l-spof"
+    },
+    {
+      "termo": "Postmortem",
+      "nome": "",
+      "categoria": "Confiabilidade",
+      "definicao": "Registro curto e sem culpados feito depois de um incidente: impacto, linha do tempo, causa (o mecanismo, não a pessoa), o que ajudou ou atrapalhou e ações com dono e prazo.",
+      "exemplo": "Um stop agendado no Rundeck que derruba `erp-01`, `erp-02` e o ERP é um bom primeiro postmortem.",
+      "licao": "l-postmortem"
+    },
+    {
+      "termo": "Proxy reverso",
+      "nome": "",
+      "categoria": "Redes",
+      "definicao": "Servidor que recebe as conexões dos clientes em nome dos backends e as repassa ao serviço certo conforme host, caminho ou outras regras. Concentra TLS, roteamento, allowlist e log de acesso num ponto só.",
+      "exemplo": "O Traefik no `proxy-01` é o proxy reverso dos sites: os 502, 503 e 504 que ele devolve falam do backend, não dele.",
+      "licao": "l-http"
+    },
+    {
+      "termo": "Rebase",
+      "nome": "",
+      "categoria": "Git e containers",
+      "definicao": "Reaplica seus commits, um a um, sobre outra base. Eles viram commits novos, com hashes novos, e o histórico fica linear. Não prioriza nenhum lado: conflitos aparecem como no merge, só que commit a commit.",
+      "exemplo": "Use para arrumar a branch local antes do PR, nunca em commits que outras pessoas já baixaram.",
+      "licao": "l-rebase"
+    },
+    {
+      "termo": "Reflog",
+      "nome": "reference log",
+      "categoria": "Git e containers",
+      "definicao": "Registro local de para onde o HEAD e as branches apontaram, inclusive antes de rebase, reset ou amend. Permite recuperar commits que sumiram do `git log`. Não vai para o remoto e as entradas expiram com o tempo.",
+      "exemplo": "Rebase deu errado: `git reflog`, ache o hash anterior e `git reset --hard HASH`.",
+      "licao": "l-rebase"
+    },
+    {
+      "termo": "Registry",
+      "nome": "registro de imagens",
+      "categoria": "Git e containers",
+      "definicao": "Servidor que armazena e distribui imagens de container, organizadas em repositórios com tags e digests. O cliente faz `push` e `pull` por HTTPS, com autenticação.",
+      "exemplo": "O OCIR é o registry da OCI; quem tem pull lá lê todas as camadas e metadados das imagens.",
+      "licao": "l-digest"
+    },
+    {
+      "termo": "REJECT × DROP",
+      "nome": "",
+      "categoria": "Redes",
+      "definicao": "Duas formas de um firewall barrar um pacote. **REJECT** descarta e avisa o remetente (com RST ou ICMP), então o erro aparece na hora. **DROP** descarta em silêncio, e o cliente retransmite o SYN até dar timeout.",
+      "exemplo": "No iptables, `REJECT --reject-with icmp-host-prohibited` aparece como *No route to host*; o REJECT padrão (`icmp-port-unreachable`) aparece como *Connection refused*.",
+      "licao": "l-tcp"
+    },
+    {
+      "termo": "Réplica",
+      "nome": "",
+      "categoria": "Confiabilidade",
+      "definicao": "Cópia de um banco que aplica continuamente as alterações do primário. No MySQL, ela guarda o arquivo e a posição do binlog em que parou e pede ao master a continuação. Protege contra falha de servidor, não contra um `DELETE` errado, que também é replicado.",
+      "exemplo": "Se o binlog de que a réplica precisa foi apagado no master, ela para com o erro 1236 e precisa ser reconstruída.",
+      "licao": "l-repl"
+    },
+    {
+      "termo": "Resource Discovery",
+      "nome": "",
+      "categoria": "IaC",
+      "definicao": "Recurso do OCI Resource Manager que lê o que já existe num compartment e gera a configuração Terraform e o state correspondentes.",
+      "exemplo": "Ponto de partida para trazer ao IaC o WAF, o LB e a VCN criados à mão, sem escrever tudo do zero.",
+      "licao": "l-state"
+    },
+    {
+      "termo": "Rollback",
+      "nome": "reversão",
+      "categoria": "Confiabilidade",
+      "definicao": "Voltar ao último estado bom conhecido depois de uma mudança ruim. Precisa estar pronto **antes** de começar: cópia do arquivo, imagem anterior ou `git revert`.",
+      "exemplo": "Com deploy por digest, o rollback é apontar o compose de volta para o digest anterior.",
+      "licao": "l-mudanca"
+    },
+    {
+      "termo": "Rotação de credencial",
+      "nome": "",
+      "categoria": "Cloud e segurança",
+      "definicao": "Trocar uma senha, token ou chave por uma nova e invalidar a antiga, atualizando todos os lugares que a usam. Em vazamento, é o primeiro passo; limpar o histórico do git é secundário.",
+      "exemplo": "Senha commitada: senha nova no cofre, redeploy de quem a usa e checagem dos logs de acesso desde o commit.",
+      "licao": "l-vazou"
+    },
+    {
+      "termo": "RPO",
+      "nome": "Recovery Point Objective",
+      "categoria": "Confiabilidade",
+      "definicao": "Quanto dado, medido em tempo, o negócio aceita perder num desastre. Depende de com que frequência os dados são copiados para fora do servidor.",
+      "exemplo": "Backup diário à meia-noite = RPO de até 24 h; binlogs copiados a cada 15 min = RPO de 15 min.",
+      "licao": "l-rpo"
+    },
+    {
+      "termo": "RST",
+      "nome": "reset",
+      "categoria": "Redes",
+      "definicao": "Flag TCP que encerra ou recusa uma conexão na hora. Um RST em resposta ao SYN significa que o host está vivo, mas nada escuta naquela porta e IP: é o *Connection refused*.",
+      "exemplo": "`ss -ltnp` no servidor mostra se a app escuta só em `127.0.0.1`, causa comum de refused para quem vem de fora.",
+      "licao": "l-tcp"
+    },
+    {
+      "termo": "RTO",
+      "nome": "Recovery Time Objective",
+      "categoria": "Confiabilidade",
+      "definicao": "Quanto tempo o serviço pode ficar fora até voltar a funcionar. O RTO real só se conhece cronometrando uma restauração de verdade.",
+      "exemplo": "Restaurar o dump do MySQL numa VM descartável e medir o tempo dá o RTO real.",
+      "licao": "l-rpo"
+    },
+    {
+      "termo": "Security List",
+      "nome": "",
+      "categoria": "Cloud e segurança",
+      "definicao": "Conjunto de regras de firewall da OCI associado à subnet: vale para todas as VNICs dela. As regras são por CIDR, protocolo e porta.",
+      "exemplo": "Uma porta não liberada na Security List aparece para o cliente como timeout, porque o pacote é descartado em silêncio.",
+      "licao": "l-nsg"
+    },
+    {
+      "termo": "Sinais de ouro",
+      "nome": "golden signals",
+      "categoria": "Confiabilidade",
+      "definicao": "Os quatro sinais que o livro de SRE do Google recomenda para monitorar qualquer serviço: **latência**, **tráfego**, **erros** e **saturação**.",
+      "exemplo": "Para cada site atrás do Traefik: latência p95, req/s, taxa de 5xx e uso do backend.",
+      "licao": "l-obs"
+    },
+    {
+      "termo": "SNI",
+      "nome": "Server Name Indication",
+      "categoria": "Redes",
+      "definicao": "Extensão do TLS em que o cliente informa, no ClientHello e em texto aberto, o nome do site que quer acessar. Com ele, um único IP na porta 443 escolhe o certificado certo entre vários sites. Não tem relação com wildcard.",
+      "exemplo": "O listener 443 do LB/WAF da OCI atende `loja`, `blog` e `portal` .exemplo.com.br no mesmo IP lendo o SNI para escolher entre os certificados importados.",
+      "licao": "l-tls"
+    },
+    {
+      "termo": "Split-horizon",
+      "nome": "DNS de visão dividida",
+      "categoria": "Redes",
+      "definicao": "Configuração em que o mesmo nome DNS tem respostas diferentes conforme quem pergunta: a rede interna recebe uma, a internet recebe outra.",
+      "exemplo": "O `exemplo.com.br` é split-horizon: quando o DNS dos DCs trava, só a visão interna quebra.",
+      "licao": "l-dns"
+    },
+    {
+      "termo": "Stateful × stateless",
+      "nome": "",
+      "categoria": "Cloud e segurança",
+      "definicao": "Numa regra **stateful**, o firewall acompanha a conexão e libera a resposta automaticamente: basta a regra de ida. Numa **stateless**, cada pacote é avaliado sozinho, e a resposta precisa de regra própria.",
+      "exemplo": "Security Lists e NSGs da OCI aceitam os dois tipos; no iptables, `-m conntrack --ctstate ESTABLISHED,RELATED` é o que torna as regras stateful.",
+      "licao": "l-nsg"
+    },
+    {
+      "termo": "sudoers",
+      "nome": "",
+      "categoria": "Linux",
+      "definicao": "Configuração (`/etc/sudoers` e `/etc/sudoers.d/`) que define quem pode rodar o quê, como qual usuário, via `sudo`. Permite liberar um único comando com argumentos fixos em vez de um shell de root. Edite com `visudo`, que valida a sintaxe.",
+      "exemplo": "`dev1 ALL=(root) NOPASSWD: /usr/bin/docker restart nome-do-container` libera só aquele restart.",
+      "licao": "l-dockerroot"
+    },
+    {
+      "termo": "systemd",
+      "nome": "",
+      "categoria": "Linux",
+      "definicao": "Init e gerenciador de serviços do Linux. Cada coisa que ele gerencia é uma **unit** (`.service`, `.timer`, `.mount`...), um arquivo declarativo com o comando, o usuário, a política de `Restart=` e as dependências.",
+      "exemplo": "`systemctl cat svc` mostra a unit que está valendo, com os overrides; `systemctl show svc -p NRestarts` conta quantas vezes reiniciou.",
+      "licao": "l-systemd"
+    },
+    {
+      "termo": "Tag de imagem",
+      "nome": "",
+      "categoria": "Git e containers",
+      "definicao": "Nome legível (`1.18.0`, `latest`) que aponta para um digest. É um ponteiro móvel: o último push com a mesma tag vence, sem aviso.",
+      "exemplo": "Deploy por tag pode rodar outra imagem se alguém repetir o push de `1.18.0`; deploy por digest, não.",
+      "licao": "l-digest"
+    },
+    {
+      "termo": "Terraform state",
+      "nome": "",
+      "categoria": "IaC",
+      "definicao": "Arquivo que liga cada recurso do código ao recurso real (IDs e atributos). É por ele que o Terraform sabe o que já existe e o que precisa mudar. Guarda atributos sensíveis em texto puro.",
+      "exemplo": "Expor o state é como expor um `.env`: nada de commitá-lo no git.",
+      "licao": "l-state"
+    },
+    {
+      "termo": "Timeout",
+      "nome": "tempo esgotado",
+      "categoria": "Redes",
+      "definicao": "O cliente mandou o pacote e nada voltou, nem resposta nem recusa; o TCP retransmite o SYN até desistir. Aponta para algo que descarta em silêncio: DROP no firewall, Security List/NSG, rota de volta errada ou host desligado.",
+      "exemplo": "`nc -vz host 5432` parado até estourar o tempo, em vez de falhar na hora, é sinal de DROP no caminho.",
+      "licao": "l-tcp"
+    },
+    {
+      "termo": "TLS",
+      "nome": "Transport Layer Security",
+      "categoria": "Redes",
+      "definicao": "Protocolo que cifra a conexão e autentica o servidor por certificado. No handshake TLS, cliente e servidor negociam versão e cifras, o servidor apresenta o certificado e os dois derivam as chaves da sessão.",
+      "exemplo": "`curl -vI https://site` mostra o handshake TLS, o certificado recebido e o código HTTP numa chamada só.",
+      "licao": "l-tls"
+    },
+    {
+      "termo": "Traces",
+      "nome": "rastreamento distribuído",
+      "categoria": "Confiabilidade",
+      "definicao": "Registram o caminho de uma requisição entre serviços, com o tempo gasto em cada etapa (spans). Respondem *onde o tempo foi gasto*; não são sinônimo de \"tempo real\".",
+      "exemplo": "Chamada lenta que passa por Traefik, API e Postgres: o trace mostra se os 3 s ficaram no banco.",
+      "licao": "l-obs"
+    },
+    {
+      "termo": "VCN",
+      "nome": "Virtual Cloud Network",
+      "categoria": "Cloud e segurança",
+      "definicao": "Rede privada virtual da OCI, com um ou mais blocos CIDR, dividida em subnets, com tabelas de rota, gateways e regras de segurança próprias.",
+      "exemplo": "A `vcn-central` (a VCN hub) centraliza a saída para a internet e a interligação com as outras redes.",
+      "licao": "l-nsg"
+    },
+    {
+      "termo": "WAF",
+      "nome": "Web Application Firewall",
+      "categoria": "Cloud e segurança",
+      "definicao": "Filtro na camada HTTP que inspeciona as requisições e bloqueia padrões de ataque (injeção de SQL, XSS, bots, excesso de requisições) antes de chegarem à aplicação. Para enxergar o HTTP, precisa que o TLS seja terminado antes dele.",
+      "exemplo": "Na OCI, a política de WAF fica associada ao load balancer, que termina o TLS com os certificados importados.",
+      "licao": "l-tls"
+    },
+    {
+      "termo": "Wildcard",
+      "nome": "certificado curinga",
+      "categoria": "Redes",
+      "definicao": "Certificado que cobre os subdomínios de um nível com `*`: `*.exemplo.com.br` vale para `a.exemplo.com.br`, não para `a.b.exemplo.com.br` nem para outro domínio. É um tipo de certificado; quem escolhe qual certificado entregar é o SNI.",
+      "exemplo": "O wildcard `*.exemplo.com.br` do `proxy-01` atende os subdomínios de exemplo.com.br, mas sites em outros domínios precisam de certificados próprios.",
+      "licao": "l-tls"
+    }
+  ]
+}
